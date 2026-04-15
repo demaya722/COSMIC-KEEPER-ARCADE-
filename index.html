@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cosmic Keeper Deluxe - 20 Niveles</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        :root {
+            --neon-cyan: #0ff;
+            --neon-magenta: #f0f;
+            --bg-dark: #050510;
+        }
+
+        body { 
+            background: var(--bg-dark); 
+            color: #fff; 
+            font-family: 'Press+Start+2P', cursive; 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: none; 
+        }
+
+        canvas { 
+            display: block; 
+            image-rendering: pixelated; 
+            margin: 0 auto; 
+            background: #000;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .ui-panel { 
+            pointer-events: none; 
+            position: absolute; 
+            width: 100%; 
+            max-width: 640px;
+            top: 20px; 
+            padding: 0 20px; 
+            z-index: 20; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 9px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        .energy-bar-wrap { 
+            width: 100px; 
+            height: 10px; 
+            border: 2px solid #fff; 
+            background: #111;
+            margin-top: 4px;
+        }
+
+        #energy-fill { 
+            width: 100%; 
+            height: 100%; 
+            background: var(--neon-cyan); 
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        .crt-scanlines { 
+            pointer-events: none; 
+            position: absolute; 
+            inset: 0; 
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%); 
+            background-size: 100% 4px; 
+            z-index: 30; 
+        }
+
+        .btn-control { 
+            background: rgba(255,255,255,0.1); 
+            border: 2px solid #fff; 
+            border-radius: 50%; 
+            width: 60px; 
+            height: 60px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+
+        .pixel-border {
+            border: 4px solid #fff;
+            padding: 20px;
+            background: #050510;
+            box-shadow: 8px 8px 0px var(--neon-magenta);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+
+    <div class="ui-panel">
+        <div>NIVEL: <span id="lvl-num">1</span>/20<br><span id="biome-name" style="color: #f0f">ESTACIÓN ALFA</span><br><span id="cell-count" style="color: #0ff">NODOS: 0/0</span></div>
+        <div class="flex flex-col items-end">
+            <div>JETPACK</div>
+            <div class="energy-bar-wrap"><div id="energy-fill"></div></div>
+        </div>
+    </div>
+
+    <div class="relative">
+        <div class="crt-scanlines"></div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <!-- Controles Móvil -->
+    <div class="mt-6 flex gap-10 md:hidden">
+        <div class="flex gap-3">
+            <button id="mLeft" class="btn-control">◀</button>
+            <button id="mRight" class="btn-control">▶</button>
+        </div>
+        <button id="mJump" class="btn-control" style="background: #066">JET</button>
+    </div>
+
+    <div id="overlay" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center text-center p-6">
+        <div class="pixel-border max-w-sm">
+            <h1 id="ov-title" class="text-xl text-cyan-400 mb-4">COSMIC KEEPER DELUXE</h1>
+            <p id="ov-msg" class="text-[8px] mb-6 leading-loose">
+                20 SECTORES • 10 BIOMAS • AMENAZA DROID<br><br>
+                RECOGE LOS NÚCLEOS Y EVITA A LOS CENTINELAS.
+            </p>
+            <button id="startBtn" class="bg-white text-black px-6 py-3 text-[10px] hover:bg-cyan-400">INICIAR OPERACIÓN</button>
+        </div>
+    </div>
+
+    <script>
+        /** @type {HTMLCanvasElement} */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const energyFill = document.getElementById('energy-fill');
+        const lvlNum = document.getElementById('lvl-num');
+        const biomeNameEl = document.getElementById('biome-name');
+        const cellCountEl = document.getElementById('cell-count');
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('startBtn');
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSfx(f, d, t='square', vol=0.05) {
+            try {
+                const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+                o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+                g.gain.setValueAtTime(vol, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
+                o.connect(g); g.connect(audioCtx.destination);
+                o.start(); o.stop(audioCtx.currentTime + d);
+            } catch(e) {}
+        }
+
+        const TILE_SIZE = 32;
+        canvas.width = 640;
+        canvas.height = 384;
+
+        // Biomas: 10 temas diferentes (cada 2 niveles cambia)
+        const BIOMES = [
+            { name: "ESTACIÓN ALFA", wall: "#1a1a40", border: "#4a4a80", bg: "#050510" },
+            { name: "CUEVAS DE CRISTAL", wall: "#3a1a40", border: "#8a4a80", bg: "#0d0510" },
+            { name: "NÚCLEO VOLCÁNICO", wall: "#401a1a", border: "#804a4a", bg: "#100505" },
+            { name: "MINAS DE NEÓN", wall: "#1a401a", border: "#4a804a", bg: "#051005" },
+            { name: "CIUDAD DE HIERRO", wall: "#222", border: "#444", bg: "#0a0a0a" },
+            { name: "BASE CIBERNÉTICA", wall: "#002244", border: "#00ffff", bg: "#000510" },
+            { name: "ABISMO ESTELAR", wall: "#111", border: "#f0f", bg: "#050010" },
+            { name: "FÁBRICA DE DROIDES", wall: "#332211", border: "#ffaa00", bg: "#0f0a05" },
+            { name: "SANTUARIO VACÍO", wall: "#444", border: "#fff", bg: "#000" },
+            { name: "NÚCLEO COSMOS", wall: "#000", border: "#0ff", bg: "#050510" }
+        ];
+
+        // Mapas: Generaremos 20 niveles variados
+        const maps = [
+            ["1111111111", "1P00000001", "10C000C001", "1110011101", "1000000001", "10C011C00E", "1111111111"], // L1
+            ["1111111111", "1P00000001", "11100C0001", "1000111001", "10C00C0001", "111100011E", "1111111111"], // L2
+            // ... (Abreviado para el código, se generarán lógicamente los 20)
+        ];
+
+        // Lógica de niveles dinámica para asegurar los 20 niveles
+        function getLevelData(idx) {
+            const biomeIdx = Math.floor(idx / 2);
+            const biome = BIOMES[biomeIdx % BIOMES.length];
+            
+            // Generación de patrones de mapa para 20 niveles
+            const width = 25 + idx;
+            const height = 12;
+            let levelMap = Array(height).fill().map(() => Array(width).fill('0'));
+            
+            // Paredes
+            for(let i=0; i<width; i++) { levelMap[0][i] = '1'; levelMap[height-1][i] = '1'; }
+            for(let i=0; i<height; i++) { levelMap[i][0] = '1'; levelMap[i][width-1] = '1'; }
+
+            // Lógica de llenado básico
+            levelMap[2][2] = 'P';
+            levelMap[height-2][width-2] = 'E';
+            
+            let cells = 0;
+            for(let i=0; i<3 + Math.floor(idx/2); i++) {
+                let rx = Math.floor(Math.random()*(width-4))+2;
+                let ry = Math.floor(Math.random()*(height-4))+2;
+                if(levelMap[ry][rx] === '0') { levelMap[ry][rx] = 'C'; cells++; }
+                // Plataformas bajo las celdas
+                if(ry < height-2) levelMap[ry+1][rx] = '1';
+            }
+
+            // Enemigos (a partir del nivel 3)
+            let enemyPositions = [];
+            if(idx >= 2) {
+                for(let i=0; i < Math.min(6, 1 + Math.floor(idx/3)); i++) {
+                    enemyPositions.push({
+                        x: (Math.floor(Math.random()*(width-10))+8)*TILE_SIZE,
+                        y: (Math.floor(Math.random()*(height-4))+2)*TILE_SIZE,
+                        type: idx % 2 === 0 ? 'patrol' : 'float'
+                    });
+                }
+            }
+
+            return { map: levelMap.map(r => r.join('')), cellsNeeded: cells, biome, enemies: enemyPositions };
+        }
+
+        let player = { 
+            x: 0, y: 0, vx: 0, vy: 0, w: 18, h: 24, 
+            energy: 100, cells: 0, grounded: false, flip: false,
+            animFrame: 0, tilt: 0 
+        };
+        
+        let currentLvlIdx = 0;
+        let activeLevel = null;
+        let tiles = [], enemies = [], particles = [];
+        let portal = { x: 0, y: 0, active: false };
+        let camera = { x: 0, y: 0 };
+        let keys = {};
+
+        function initLevel(idx) {
+            activeLevel = getLevelData(idx);
+            tiles = [];
+            enemies = [];
+            particles = [];
+            player.cells = 0;
+            player.energy = 100;
+            portal.active = false;
+            
+            lvlNum.innerText = idx + 1;
+            biomeNameEl.innerText = activeLevel.biome.name;
+            biomeNameEl.style.color = activeLevel.biome.border;
+
+            activeLevel.map.forEach((row, r) => {
+                row.split('').forEach((char, c) => {
+                    const x = c * TILE_SIZE; const y = r * TILE_SIZE;
+                    if (char === '1') tiles.push({ x, y, type: 'block' });
+                    if (char === 'P') { player.x = x; player.y = y; }
+                    if (char === 'C') tiles.push({ x, y, type: 'cell', active: true });
+                    if (char === 'E') { portal.x = x; portal.y = y; }
+                });
+            });
+
+            activeLevel.enemies.forEach(en => {
+                enemies.push({
+                    x: en.x, y: en.y, w: 24, h: 24,
+                    startX: en.x, range: 100 + Math.random()*100,
+                    vx: 1.5 + (idx*0.1), vy: 0, type: en.type,
+                    phase: Math.random() * Math.PI * 2
+                });
+            });
+            updateUI();
+        }
+
+        function updateUI() {
+            cellCountEl.innerText = `NODOS: ${player.cells}/${activeLevel.cellsNeeded}`;
+        }
+
+        function update() {
+            if (overlay.offsetParent !== null) return;
+
+            // Movimiento e inclinación animada
+            let moving = false;
+            if (keys['ArrowLeft'] || keys['KeyA']) { 
+                player.vx -= 0.6; player.flip = true; player.tilt = -0.2; moving = true;
+            }
+            if (keys['ArrowRight'] || keys['KeyD']) { 
+                player.vx += 0.6; player.flip = false; player.tilt = 0.2; moving = true;
+            }
+            if(!moving) player.tilt *= 0.8;
+
+            // Jetpack
+            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['mJump']) && player.energy > 0) {
+                player.vy -= 1.1; player.energy -= 0.8;
+                if(Math.random() > 0.5) spawnPart(player.x+player.w/2, player.y+player.h, '#0ff', 1);
+                if(Math.random() > 0.9) playSfx(100+Math.random()*100, 0.05, 'sawtooth', 0.02);
+            } else if (player.grounded) {
+                player.energy = Math.min(100, player.energy + 0.6);
+            }
+
+            player.vx *= 0.88; player.vy += 0.45;
+            player.x += player.vx;
+            checkCols(true);
+            player.y += player.vy;
+            player.grounded = false;
+            checkCols(false);
+
+            // Enemigos
+            enemies.forEach(en => {
+                if(en.type === 'patrol') {
+                    en.x += en.vx;
+                    if(Math.abs(en.x - en.startX) > en.range) en.vx *= -1;
+                } else {
+                    en.phase += 0.05;
+                    en.y += Math.sin(en.phase) * 2;
+                }
+
+                if(Math.abs(player.x - en.x) < 20 && Math.abs(player.y - en.y) < 20) die();
+            });
+
+            // Portal
+            if(portal.active && Math.abs(player.x - portal.x) < 24 && Math.abs(player.y - portal.y) < 24) {
+                playSfx(1200, 0.3, 'sine');
+                currentLvlIdx++;
+                if(currentLvlIdx >= 20) victory();
+                else initLevel(currentLvlIdx);
+            }
+
+            // Cámara suave
+            camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
+            camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
+
+            // Partículas
+            for(let i=particles.length-1; i>=0; i--) {
+                particles[i].x += particles[i].vx; 
+                particles[i].y += particles[i].vy; 
+                particles[i].l -= 0.03;
+                if(particles[i].l <= 0) particles.splice(i, 1);
+            }
+
+            energyFill.style.width = player.energy + '%';
+            player.animFrame += 0.1;
+        }
+
+        function checkCols(horiz) {
+            tiles.forEach(t => {
+                if(t.type === 'block') {
+                    if(player.x < t.x + TILE_SIZE && player.x + player.w > t.x &&
+                       player.y < t.y + TILE_SIZE && player.y + player.h > t.y) {
+                        if(horiz) {
+                            player.x = player.vx > 0 ? t.x - player.w : t.x + TILE_SIZE;
+                            player.vx = 0;
+                        } else {
+                            if(player.vy > 0) { player.y = t.y - player.h; player.grounded = true; }
+                            else { player.y = t.y + TILE_SIZE; }
+                            player.vy = 0;
+                        }
+                    }
+                } else if(!horiz && t.type === 'cell' && t.active) {
+                    if(player.x < t.x+24 && player.x+player.w > t.x+8 && player.y < t.y+24 && player.y+player.h > t.y+8) {
+                        t.active = false; player.cells++;
+                        playSfx(800, 0.1, 'sine');
+                        for(let i=0; i<6; i++) spawnPart(t.x+16, t.y+16, '#0ff', 3);
+                        updateUI();
+                        if(player.cells >= activeLevel.cellsNeeded) portal.active = true;
+                    }
+                }
+            });
+        }
+
+        function spawnPart(x, y, c, s) {
+            particles.push({x, y, vx:(Math.random()-0.5)*s, vy:(Math.random()-0.5)*s, l:1, c});
+        }
+
+        function die() {
+            playSfx(50, 0.4, 'sawtooth');
+            initLevel(currentLvlIdx);
+        }
+
+        function draw() {
+            ctx.fillStyle = activeLevel.biome.bg;
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // Tiles
+            tiles.forEach(t => {
+                if(t.type === 'block') {
+                    ctx.fillStyle = activeLevel.biome.wall;
+                    ctx.fillRect(t.x, t.y, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = activeLevel.biome.border;
+                    ctx.strokeRect(t.x+2, t.y+2, TILE_SIZE-4, TILE_SIZE-4);
+                } else if(t.active) {
+                    ctx.fillStyle = '#0ff';
+                    const s = 10 + Math.sin(player.animFrame)*3;
+                    ctx.fillRect(t.x+16-s/2, t.y+16-s/2, s, s);
+                }
+            });
+
+            // Portal
+            if(portal.active) {
+                ctx.strokeStyle = '#f0f'; ctx.lineWidth = 3;
+                ctx.strokeRect(portal.x+4, portal.y+4, 24, 24);
+                if(Math.random()>0.8) spawnPart(portal.x+16, portal.y+16, '#f0f', 2);
+            }
+
+            // Enemigos
+            enemies.forEach(en => {
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(en.x, en.y, en.w, en.h);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(en.x + (en.vx > 0 ? 16 : 4), en.y + 6, 4, 4);
+            });
+
+            // Jugador animado
+            ctx.save();
+            ctx.translate(player.x + player.w/2, player.y + player.h/2);
+            ctx.rotate(player.tilt);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
+            ctx.fillStyle = '#333';
+            const visorX = player.flip ? -player.w/2 : player.w/2 - 8;
+            ctx.fillRect(visorX, -player.h/2 + 4, 8, 6);
+            ctx.restore();
+
+            particles.forEach(p => {
+                ctx.globalAlpha = p.l; ctx.fillStyle = p.c;
+                ctx.fillRect(p.x, p.y, 2, 2);
+            });
+            ctx.restore();
+        }
+
+        function victory() {
+            overlay.classList.remove('hidden');
+            document.getElementById('ov-title').innerText = "MISIÓN COMPLETA";
+            document.getElementById('ov-msg').innerText = "EL COSMOS ESTÁ A SALVO GRACIAS A TI.";
+            startBtn.innerText = "REINICIAR";
+            startBtn.onclick = () => location.reload();
+        }
+
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+        const m = (id, k) => {
+            const b = document.getElementById(id);
+            b.ontouchstart = (e) => { e.preventDefault(); keys[k] = true; };
+            b.ontouchend = (e) => { e.preventDefault(); keys[k] = false; };
+        };
+        m('mLeft', 'ArrowLeft'); m('mRight', 'ArrowRight'); m('mJump', 'mJump');
+
+        startBtn.onclick = () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            overlay.classList.add('hidden');
+            initLevel(0);
+            function loop() { update(); draw(); requestAnimationFrame(loop); }
+            loop();
+        };
+
+        initLevel(0); draw();
+    </script>
+</body>
+</html>
