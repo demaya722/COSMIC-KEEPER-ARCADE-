@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cosmic Keeper - Pro Edition</title>
+    <title>Cosmic Keeper</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&display=swap');
@@ -32,6 +32,8 @@
             box-shadow: 0 0 60px rgba(0, 242, 255, 0.2);
             background: #000;
             border: 4px solid #1a1a2e;
+            width: 800px;
+            height: 450px;
         }
 
         canvas { 
@@ -85,22 +87,28 @@
             padding: 15px 30px;
             color: var(--neon-cyan);
             font-family: 'Press Start 2P', cursive;
-            font-size: 12px;
+            font-size: 10px;
             cursor: pointer;
             transition: all 0.2s;
             text-transform: uppercase;
         }
 
-        .btn-retro:hover { 
+        .btn-retro:hover:not(:disabled) { 
             background: var(--neon-cyan); 
             color: #000;
             box-shadow: 0 0 20px var(--neon-cyan);
         }
 
+        .btn-retro:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            border-color: #444;
+        }
+
         .overlay {
-            position: fixed;
+            position: absolute;
             inset: 0;
-            background: rgba(2, 2, 10, 0.95);
+            background: rgba(2, 2, 10, 0.98);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -112,33 +120,103 @@
 
         .hidden { display: none !important; }
 
-        .stat-label { font-size: 10px; color: #888; margin-bottom: 2px; }
-        .stat-value { font-size: 14px; font-weight: bold; color: #fff; }
+        .stat-label { font-size: 8px; color: #888; margin-bottom: 2px; font-family: 'Press Start 2P'; }
+        .stat-value { font-size: 12px; font-weight: bold; color: #fff; font-family: 'Press Start 2P'; }
+
+        /* Menu de Selección */
+        .grid-maps {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+            max-height: 250px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .map-card {
+            background: #111;
+            border: 1px solid #333;
+            padding: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .map-card:hover:not(.locked) { border-color: var(--neon-cyan); transform: scale(1.05); }
+        .map-card.locked { opacity: 0.4; cursor: not-allowed; }
+        .map-card.best { border-color: var(--neon-magenta); }
+        
+        .ranking-table {
+            width: 100%;
+            font-size: 9px;
+            font-family: 'Press Start 2P';
+            border-collapse: collapse;
+        }
+        .ranking-table th { color: var(--neon-cyan); border-bottom: 2px solid #333; padding: 10px; }
+        .ranking-table td { padding: 8px; border-bottom: 1px solid #222; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        <div class="ui-layer">
+        <!-- UI de Juego Activo -->
+        <div id="game-ui" class="ui-layer hidden">
             <div>
-                <div class="stat-label">MISIÓN ACTUAL</div>
-                <div class="stat-value">SECTOR <span id="lvl-ui">1</span>/20</div>
-                <div id="biome-ui" class="text-[10px] mt-1 font-bold">CARGANDO...</div>
+                <div class="stat-label">SECTOR</div>
+                <div class="stat-value"><span id="lvl-ui">1</span>/20</div>
+                <div id="timer-ui" class="text-cyan-400 text-[10px] mt-2 font-bold font-mono">00:00:00</div>
             </div>
             <div class="text-right">
-                <div class="stat-label">SISTEMAS DE JETPACK</div>
+                <div class="stat-label">SISTEMAS</div>
                 <div class="energy-bar-container">
                     <div id="energy-fill"></div>
                 </div>
-                <div id="nodes-ui" class="mt-2 text-[12px] text-cyan-400 font-bold">NODOS: 0/0</div>
+                <div id="nodes-ui" class="mt-2 text-[10px] text-cyan-400 font-bold">NODOS: 0/0</div>
+                <div id="deaths-ui" class="text-red-500 text-[8px] mt-1">MUERTES: 0</div>
             </div>
         </div>
+
         <div class="crt-overlay"></div>
         <canvas id="gameCanvas"></canvas>
+
+        <!-- Menu Principal -->
+        <div id="main-menu" class="overlay">
+            <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">COSMIC KEEPER</h1>
+            <p class="text-magenta-500 font-bold mb-8 tracking-[0.3em] text-[10px]">SISTEMA DE SELECCIÓN DE MAPAS</p>
+            
+            <div class="flex flex-col gap-4">
+                <button onclick="showScreen('selection')" class="btn-retro">INICIAR MISIÓN</button>
+                <button onclick="showScreen('ranking')" class="btn-retro">RANKING GLOBAL</button>
+            </div>
+        </div>
+
+        <!-- Selección de Niveles -->
+        <div id="selection-menu" class="overlay hidden">
+            <h2 class="text-xl font-bold text-cyan-400 mb-4">SECTORES DISPONIBLES</h2>
+            <div id="map-grid" class="grid-maps"></div>
+            <button onclick="showScreen('main')" class="btn-retro mt-6">VOLVER</button>
+        </div>
+
+        <!-- Ranking -->
+        <div id="ranking-menu" class="overlay hidden">
+            <h2 class="text-xl font-bold text-magenta-500 mb-4">LOGROS DE OPERACIÓN</h2>
+            <div class="w-full max-w-2xl overflow-y-auto max-h-[250px] bg-black/50 p-4 border border-slate-800">
+                <table class="ranking-table">
+                    <thead>
+                        <tr>
+                            <th>MAPA</th>
+                            <th>TIEMPO</th>
+                            <th>MUERTES</th>
+                            <th>ESTADO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ranking-body"></tbody>
+                </table>
+            </div>
+            <button onclick="showScreen('main')" class="btn-retro mt-6">VOLVER</button>
+        </div>
     </div>
 
     <!-- Controles Móviles -->
-    <div class="fixed bottom-8 left-0 right-0 flex justify-between px-8 md:hidden z-50">
+    <div id="mobile-ui" class="fixed bottom-8 left-0 right-0 flex justify-between px-8 md:hidden z-50 hidden">
         <div class="flex gap-4">
             <div id="mLeft" class="btn-retro !p-6 flex items-center justify-center">◀</div>
             <div id="mRight" class="btn-retro !p-6 flex items-center justify-center">▶</div>
@@ -146,34 +224,28 @@
         <div id="mJump" class="btn-retro !px-10 flex items-center justify-center">VUELO</div>
     </div>
 
-    <div id="overlay" class="overlay">
-        <h1 class="text-5xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">COSMIC KEEPER</h1>
-        <p class="text-magenta-500 font-bold mb-8 tracking-[0.3em]">OPERACIÓN: LIMPIEZA DE VACÍO</p>
-        
-        <div class="bg-slate-900/50 p-6 rounded-lg border border-slate-800 mb-8 max-w-md">
-            <p id="ov-msg" class="text-sm leading-relaxed text-slate-300">
-                El sistema de seguridad ha fallado. Recolecta los núcleos de datos para abrir el portal interdimensional.
-                <br><br>
-                <span class="text-cyan-400">WASD</span> o <span class="text-cyan-400">FLECHAS</span> para moverte.<br>
-                Mantén <span class="text-cyan-400">ESPACIO</span> para activar el Jetpack.
-            </p>
-        </div>
-
-        <button id="startBtn" class="btn-retro">INICIAR PROTOCOLO</button>
-    </div>
-
     <script>
-        /** @type {HTMLCanvasElement} */
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 800;
         canvas.height = 450;
 
+        // --- SISTEMA DE DATOS PERSISTENTES ---
+        const MAX_LEVELS = 20;
+        let gameData = JSON.parse(localStorage.getItem('cosmicKeeperData')) || {
+            unlocked: 1,
+            stats: {} // mapaID: { time: ms, deaths: n }
+        };
+
+        function saveGame() {
+            localStorage.setItem('cosmicKeeperData', JSON.stringify(gameData));
+        }
+
         const BIOMES = [
-            { name: "NÚCLEO DE LA ESTACIÓN", wall: "#16213e", border: "#00d2ff", bg: "#020205", node: "#00f2ff" },
-            { name: "CÁMARA DE NEBULA", wall: "#2d132c", border: "#ff00ea", bg: "#050205", node: "#ff00ea" },
-            { name: "MINA DE CRISTAL", wall: "#1b262c", border: "#0f4c75", bg: "#020505", node: "#3282b8" },
-            { name: "VOID ZERO", wall: "#111", border: "#444", bg: "#000", node: "#fff" }
+            { name: "NÚCLEO ESTACIÓN", wall: "#16213e", border: "#00d2ff", bg: "#020205", node: "#00f2ff", detail: "#1a2a4a" },
+            { name: "CÁMARA NEBULA", wall: "#2d132c", border: "#ff00ea", bg: "#050205", node: "#ff00ea", detail: "#3d1a3c" },
+            { name: "MINA CRISTAL", wall: "#1b262c", border: "#0f4c75", bg: "#020505", node: "#3282b8", detail: "#223b4d" },
+            { name: "VOID ZERO", wall: "#111", border: "#444", bg: "#000", node: "#fff", detail: "#222" }
         ];
 
         const audio = {
@@ -194,59 +266,34 @@
         };
 
         const player = {
-            x: 100, y: 100, vx: 0, vy: 0,
-            w: 22, h: 30,
-            speed: 0.5, // Ajustado para ser más realista y menos "loco"
-            maxSpeed: 4.5,
-            friction: 0.85,
-            gravity: 0.28,
-            jumpForce: 0.55,
-            energy: 100,
-            grounded: false,
-            flip: false,
+            x: 100, y: 100, vx: 0, vy: 0, w: 22, h: 30,
+            speed: 0.45, maxSpeed: 4.2, friction: 0.86, gravity: 0.26, jumpForce: 0.52,
+            energy: 100, grounded: false, flip: false,
             
             update(tiles) {
-                // Movimiento horizontal
                 if (game.keys['ArrowLeft'] || game.keys['KeyA'] || game.keys['mLeft']) {
-                    this.vx -= this.speed;
-                    this.flip = true;
+                    this.vx -= this.speed; this.flip = true;
                 } else if (game.keys['ArrowRight'] || game.keys['KeyD'] || game.keys['mRight']) {
-                    this.vx += this.speed;
-                    this.flip = false;
-                } else {
-                    this.vx *= this.friction;
-                }
+                    this.vx += this.speed; this.flip = false;
+                } else { this.vx *= this.friction; }
 
-                // Limitar velocidad horizontal
                 if(Math.abs(this.vx) > this.maxSpeed) this.vx = Math.sign(this.vx) * this.maxSpeed;
 
-                // Jetpack
                 const isJumping = game.keys['Space'] || game.keys['ArrowUp'] || game.keys['KeyW'] || game.keys['mJump'];
                 if (isJumping && this.energy > 0) {
                     this.vy -= this.jumpForce;
-                    this.energy -= 0.8;
-                    if(Math.random() > 0.3) spawnPart(this.x + this.w/2, this.y + this.h, '#00f2ff');
-                    if(Math.random() > 0.9) audio.play(150, 0.05, 0.02, 'sawtooth');
+                    this.energy -= 0.75;
+                    if(Math.random() > 0.4) spawnPart(this.x + this.w/2, this.y + this.h, '#00f2ff');
                 } else if(this.grounded) {
-                    this.energy = Math.min(100, this.energy + 1.5);
+                    this.energy = Math.min(100, this.energy + 1.6);
                 }
 
                 this.vy += this.gravity;
-                
-                // Colisiones Robustas por Eje
-                // Eje X
-                this.x += this.vx;
-                this.resolveCollisions(tiles, 'x');
-                
-                // Eje Y
-                this.y += this.vy;
-                this.grounded = false;
-                this.resolveCollisions(tiles, 'y');
+                this.x += this.vx; this.resolveCollisions(tiles, 'x');
+                this.y += this.vy; this.grounded = false; this.resolveCollisions(tiles, 'y');
 
-                // Límites de la pantalla
                 if(this.x < 0) this.x = 0;
                 if(this.x + this.w > game.mapW) this.x = game.mapW - this.w;
-                if(this.y < 0) { this.y = 0; this.vy = 0; }
                 if(this.y + this.h > game.mapH) { this.y = game.mapH - this.h; this.vy = 0; this.grounded = true; }
             },
 
@@ -259,12 +306,8 @@
                             else if(this.vx < 0) this.x = t.x + t.w;
                             this.vx = 0;
                         } else {
-                            if(this.vy > 0) {
-                                this.y = t.y - this.h;
-                                this.grounded = true;
-                            } else if(this.vy < 0) {
-                                this.y = t.y + t.h;
-                            }
+                            if(this.vy > 0) { this.y = t.y - this.h; this.grounded = true; }
+                            else if(this.vy < 0) { this.y = t.y + t.h; }
                             this.vy = 0;
                         }
                     }
@@ -274,279 +317,288 @@
             draw() {
                 ctx.save();
                 ctx.translate(this.x - game.cameraX, this.y);
-                
-                // Efecto de brillo
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = 'rgba(0, 242, 255, 0.5)';
-
-                // Traje
                 ctx.fillStyle = '#e1e1e1';
                 ctx.fillRect(0, 0, this.w, this.h);
-                
-                // Visor
                 ctx.fillStyle = '#1a1a2e';
                 const visorX = this.flip ? 2 : 12;
                 ctx.fillRect(visorX, 5, 8, 8);
-                
-                // Detalle neon en el casco
                 ctx.fillStyle = '#00f2ff';
                 ctx.fillRect(visorX, 5, 8, 2);
-
-                // Mochila
                 ctx.fillStyle = '#888';
                 const packX = this.flip ? this.w - 4 : -4;
                 ctx.fillRect(packX, 10, 8, 15);
-
                 ctx.restore();
             }
         };
 
         let game = {
-            lvl: 0, nodes: 0, needed: 0,
+            lvl: 1, nodes: 0, needed: 0,
             paused: true, cameraX: 0,
             mapW: 0, mapH: 450,
             keys: {}, particles: [], enemies: [], stars: [], tiles: [],
-            portal: { x: 0, y: 0, active: false, size: 60 }
+            portal: { x: 0, y: 0, active: false },
+            startTime: 0, currentDeaths: 0
         };
 
         function spawnPart(x, y, c) {
-            game.particles.push({ 
-                x, y, 
-                vx: (Math.random()-0.5)*2, 
-                vy: Math.random()*2, 
-                l: 1.0, 
-                c 
-            });
+            game.particles.push({ x, y, vx: (Math.random()-0.5)*2.5, vy: Math.random()*2, l: 1.0, c });
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const centiseconds = Math.floor((ms % 1000) / 10);
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${centiseconds.toString().padStart(2, '0')}`;
         }
 
         function generateLevel(idx) {
             game.lvl = idx + 1;
             game.nodes = 0;
-            game.needed = 6 + Math.floor(idx * 1.2);
-            game.mapW = 1200 + (idx * 200);
+            game.needed = 5 + Math.floor(idx * 0.8);
+            game.mapW = 1600 + (idx * 150);
             game.tiles = []; game.enemies = []; game.particles = [];
             game.portal.active = false;
+            game.startTime = Date.now();
             
             const biome = BIOMES[idx % BIOMES.length];
             document.getElementById('lvl-ui').innerText = game.lvl;
-            document.getElementById('biome-ui').innerText = biome.name;
-            document.getElementById('biome-ui').style.color = biome.border;
+            document.getElementById('nodes-ui').innerText = `NODOS: 0/${game.needed}`;
+            document.getElementById('deaths-ui').innerText = `MUERTES: ${game.currentDeaths}`;
 
-            // Suelo y techo sólidos
             for(let x=0; x < game.mapW; x += 40) {
-                game.tiles.push({ x, y: 0, w: 40, h: 40, type: 'wall' });
-                game.tiles.push({ x, y: game.mapH - 40, w: 40, h: 40, type: 'wall' });
+                game.tiles.push({ x, y: 0, w: 40, h: 40, type: 'wall', isBorder: true });
+                game.tiles.push({ x, y: game.mapH - 40, w: 40, h: 40, type: 'wall', isBorder: true });
             }
 
-            // Generar plataformas aleatorias asegurando que no se bloqueen
-            for(let i=0; i < 25 + (idx*5); i++) {
-                let px = 200 + Math.random() * (game.mapW - 400);
-                let py = 100 + Math.random() * (game.mapH - 200);
-                game.tiles.push({ x: px, y: py, w: 80, h: 20, type: 'wall' });
+            const rows = 4;
+            const cols = Math.floor(game.mapW / 200);
+            for(let r = 0; r < rows; r++) {
+                for(let c = 1; c < cols; c++) {
+                    if(Math.random() > 0.4) {
+                        game.tiles.push({ 
+                            x: c * 200 + (Math.random() * 50), 
+                            y: (r + 1) * 80 + (Math.random() * 20), 
+                            w: 60 + Math.random() * 100, 
+                            h: 24, type: 'wall' 
+                        });
+                    }
+                }
             }
 
-            // Respawn de Nodos (dentro del mapa, no en paredes)
             let nodesCreated = 0;
             while(nodesCreated < game.needed) {
-                let nx = 150 + Math.random() * (game.mapW - 300);
+                let nx = 200 + Math.random() * (game.mapW - 400);
                 let ny = 60 + Math.random() * (game.mapH - 120);
-                
-                // Verificar que no esté dentro de una pared
-                let inside = game.tiles.some(t => nx > t.x-20 && nx < t.x+t.w+20 && ny > t.y-20 && ny < t.y+t.h+20);
-                if(!inside) {
+                if(!game.tiles.some(t => nx > t.x-30 && nx < t.x+t.w+30 && ny > t.y-30 && ny < t.y+t.h+30)) {
                     game.tiles.push({ x: nx, y: ny, type: 'node', active: true, phase: Math.random()*10 });
                     nodesCreated++;
                 }
             }
 
-            // Enemigos (Drones patrulleros)
-            let enemyCount = 5 + Math.floor(idx * 1.5);
+            let enemyCount = 6 + Math.floor(idx * 1.2);
             for(let i=0; i< enemyCount; i++) {
                 game.enemies.push({
-                    x: 400 + Math.random() * (game.mapW - 600),
-                    y: 60 + Math.random() * (game.mapH - 120),
-                    vx: (1.5 + (idx * 0.15)) * (Math.random() > 0.5 ? 1 : -1),
-                    vy: (Math.random() - 0.5) * 1,
-                    range: 150 + Math.random() * 100,
-                    originX: 0,
+                    x: 500 + Math.random() * (game.mapW - 700),
+                    y: 100 + Math.random() * (game.mapH - 200),
+                    vx: (1.4 + (idx * 0.1)) * (Math.random() > 0.5 ? 1 : -1),
+                    range: 120 + Math.random() * 150, originX: 0,
                     update() {
                         if(this.originX === 0) this.originX = this.x;
-                        this.x += this.vx;
-                        this.y += Math.sin(Date.now() / 500) * 0.5; // Movimiento flotante
+                        this.x += this.vx; this.y += Math.sin(Date.now() / 600) * 0.4;
                         if(Math.abs(this.x - this.originX) > this.range) this.vx *= -1;
                     }
                 });
             }
 
-            game.portal.x = game.mapW - 150;
-            game.portal.y = game.mapH / 2 - 30;
-            player.x = 100;
-            player.y = game.mapH - 100;
+            game.portal.x = game.mapW - 180;
+            game.portal.y = game.mapH / 2 - 40;
+            player.x = 120; player.y = game.mapH - 100;
             player.vx = player.vy = 0;
 
-            game.stars = Array(200).fill().map(() => ({
+            game.stars = Array(150).fill().map(() => ({
                 x: Math.random()*canvas.width, y: Math.random()*canvas.height, 
-                s: Math.random()*2, p: 0.1 + Math.random()*0.3
+                s: Math.random()*1.5, p: 0.05 + Math.random()*0.2
             }));
         }
 
         function update() {
             if(game.paused) return;
-
             player.update(game.tiles);
 
-            // Colisión con Nodos
+            const currentTime = Date.now() - game.startTime;
+            document.getElementById('timer-ui').innerText = formatTime(currentTime);
+
             game.tiles.forEach(t => {
                 if(t.type === 'node' && t.active) {
                     if(Math.hypot(player.x + player.w/2 - t.x, player.y + player.h/2 - t.y) < 30) {
-                        t.active = false;
-                        game.nodes++;
-                        audio.play(440 + (game.nodes * 40), 0.1, 0.05, 'sine', 200);
-                        for(let i=0; i<8; i++) spawnPart(t.x, t.y, '#fff');
-                        if(game.nodes >= game.needed) {
-                            game.portal.active = true;
-                            audio.play(200, 0.5, 0.1, 'square', 400);
-                        }
+                        t.active = false; game.nodes++;
+                        audio.play(400 + (game.nodes * 50), 0.1, 0.06, 'sine', 150);
+                        if(game.nodes >= game.needed) game.portal.active = true;
                     }
                 }
             });
 
-            // Colisión con Enemigos
             game.enemies.forEach(e => {
                 e.update();
-                if(Math.hypot(player.x + player.w/2 - e.x, player.y + player.h/2 - e.y) < 25) {
-                    audio.play(60, 0.5, 0.2, 'sawtooth', -20);
+                if(Math.hypot(player.x + player.w/2 - e.x, player.y + player.h/2 - e.y) < 26) {
+                    game.currentDeaths++;
+                    audio.play(50, 0.4, 0.25, 'sawtooth');
                     generateLevel(game.lvl - 1);
                 }
             });
 
-            // Portal
-            if(game.portal.active && Math.hypot(player.x + player.w/2 - (game.portal.x + 30), player.y + player.h/2 - (game.portal.y + 30)) < 40) {
-                audio.play(800, 0.6, 0.1, 'sine', 400);
-                if(game.lvl >= 20) {
-                    game.paused = true;
-                    document.getElementById('overlay').classList.remove('hidden');
-                    document.querySelector('h1').innerText = "MISIÓN CUMPLIDA";
-                    document.getElementById('ov-msg').innerText = "Has estabilizado todos los sectores galácticos.";
-                } else {
-                    generateLevel(game.lvl);
-                }
+            if(game.portal.active && Math.hypot(player.x + player.w/2 - (game.portal.x + 40), player.y + player.h/2 - (game.portal.y + 40)) < 45) {
+                finishLevel();
             }
 
-            // Cámara suave
             let targetCam = player.x - canvas.width/2;
-            game.cameraX += (targetCam - game.cameraX) * 0.1;
+            game.cameraX += (targetCam - game.cameraX) * 0.08;
             game.cameraX = Math.max(0, Math.min(game.cameraX, game.mapW - canvas.width));
             
-            // Partículas
             for(let i=game.particles.length-1; i>=0; i--){
-                let p = game.particles[i];
-                p.x += p.vx; p.y += p.vy; p.l -= 0.02;
-                if(p.l <= 0) game.particles.splice(i, 1);
+                game.particles[i].x += game.particles[i].vx;
+                game.particles[i].y += game.particles[i].vy;
+                game.particles[i].l -= 0.025;
+                if(game.particles[i].l <= 0) game.particles.splice(i, 1);
             }
 
-            // UI
             document.getElementById('energy-fill').style.width = player.energy + '%';
             document.getElementById('nodes-ui').innerText = `NODOS: ${game.nodes}/${game.needed}`;
-            document.getElementById('energy-fill').style.filter = player.energy < 25 ? 'hue-rotate(-100deg)' : 'none';
+        }
+
+        function finishLevel() {
+            const finalTime = Date.now() - game.startTime;
+            const currentRecord = gameData.stats[game.lvl] || { time: Infinity, deaths: Infinity };
+
+            // Guardar si es mejor tiempo
+            if (finalTime < currentRecord.time) {
+                gameData.stats[game.lvl] = { time: finalTime, deaths: game.currentDeaths };
+            }
+
+            if (game.lvl === gameData.unlocked && gameData.unlocked < MAX_LEVELS) {
+                gameData.unlocked++;
+            }
+
+            saveGame();
+            game.paused = true;
+            game.currentDeaths = 0;
+            showScreen('selection');
         }
 
         function draw() {
             const biome = BIOMES[(game.lvl-1)%BIOMES.length];
-            
-            // Limpiar fondo
             ctx.fillStyle = biome.bg;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Estrellas (Parallax)
-            ctx.fillStyle = "#fff";
             game.stars.forEach(s => {
                 let sx = (s.x - game.cameraX * s.p) % canvas.width;
                 if(sx < 0) sx += canvas.width;
+                ctx.fillStyle = "rgba(255,255,255,0.8)";
                 ctx.fillRect(sx, s.y, s.s, s.s);
             });
 
             ctx.save();
             ctx.translate(-game.cameraX, 0);
 
-            // Dibujar Paredes
             game.tiles.forEach(t => {
                 if(t.type === 'wall') {
-                    ctx.fillStyle = biome.wall;
-                    ctx.fillRect(t.x, t.y, t.w, t.h);
-                    ctx.strokeStyle = biome.border;
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(t.x + 2, t.y + 2, t.w - 4, t.h - 4);
+                    ctx.fillStyle = biome.wall; ctx.fillRect(t.x, t.y, t.w, t.h);
+                    ctx.strokeStyle = biome.border; ctx.lineWidth = 1.5; ctx.strokeRect(t.x+1, t.y+1, t.w-2, t.h-2);
+                    if(!t.isBorder) {
+                        ctx.fillStyle = biome.detail; ctx.fillRect(t.x, t.y + t.h/2 - 2, t.w, 4);
+                    }
                 } else if(t.active) {
-                    // Dibujar Nodo mejorado
-                    const bounce = Math.sin(Date.now()/200 + t.phase) * 5;
-                    ctx.shadowBlur = 15;
-                    ctx.shadowColor = biome.node;
-                    ctx.fillStyle = biome.node;
-                    // Núcleo
-                    ctx.beginPath();
-                    ctx.arc(t.x, t.y + bounce, 8, 0, Math.PI*2);
-                    ctx.fill();
-                    // Anillo
-                    ctx.strokeStyle = "#fff";
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.ellipse(t.x, t.y + bounce, 15, 6, Math.PI/4 + Date.now()/500, 0, Math.PI*2);
-                    ctx.stroke();
-                    ctx.shadowBlur = 0;
+                    const bounce = Math.sin(Date.now()/250 + t.phase) * 6;
+                    ctx.fillStyle = biome.node; ctx.beginPath(); ctx.arc(t.x, t.y + bounce, 9, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.ellipse(t.x, t.y+bounce, 18, 7, Math.PI/4+Date.now()/400, 0, Math.PI*2); ctx.stroke();
                 }
             });
 
-            // Dibujar Enemigos (Drones)
             game.enemies.forEach(e => {
-                ctx.fillStyle = '#ff4d4d';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = 'red';
-                // Cuerpo drone
-                ctx.fillRect(e.x - 12, e.y - 12, 24, 24);
-                // "Ojo"
-                ctx.fillStyle = '#fff';
-                let eyeOffset = Math.sign(e.vx) * 5;
-                ctx.fillRect(e.x - 2 + eyeOffset, e.y - 4, 4, 8);
-                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#333'; ctx.fillRect(e.x - 14, e.y - 14, 28, 20);
+                ctx.fillStyle = '#ff3333'; ctx.fillRect(e.x - 4, e.y - 6, 8, 8);
             });
 
-            // Portal
             if(game.portal.active) {
-                const s = 60 + Math.sin(Date.now()/150) * 10;
-                ctx.shadowBlur = 30;
-                ctx.shadowColor = '#ff00ea';
-                ctx.strokeStyle = '#ff00ea';
-                ctx.lineWidth = 5;
-                ctx.strokeRect(game.portal.x + (60-s)/2, game.portal.y + (60-s)/2, s, s);
-                
-                // Efecto de vórtice
-                ctx.lineWidth = 2;
-                ctx.strokeRect(game.portal.x + 10, game.portal.y + 10, 40, 40);
-                ctx.shadowBlur = 0;
+                const s = 70 + Math.sin(Date.now()/100) * 15;
+                ctx.strokeStyle = '#ff00ea'; ctx.lineWidth = 4;
+                ctx.strokeRect(game.portal.x + (80-s)/2, game.portal.y + (80-s)/2, s, s);
             }
 
-            // Partículas
-            game.particles.forEach(p => {
-                ctx.globalAlpha = p.l;
-                ctx.fillStyle = p.c;
-                ctx.fillRect(p.x, p.y, 3, 3);
-            });
+            game.particles.forEach(p => { ctx.globalAlpha = p.l; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, 3, 3); });
             ctx.globalAlpha = 1;
-
             ctx.restore();
-            
-            // El jugador se dibuja relativo a la cámara dentro de su función
             player.draw();
         }
 
+        // --- SISTEMA DE NAVEGACIÓN ---
+        function showScreen(screen) {
+            document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+            document.getElementById('game-ui').classList.add('hidden');
+            document.getElementById('mobile-ui').classList.add('hidden');
+
+            if (screen === 'main') {
+                document.getElementById('main-menu').classList.remove('hidden');
+            } else if (screen === 'selection') {
+                renderMapGrid();
+                document.getElementById('selection-menu').classList.remove('hidden');
+            } else if (screen === 'ranking') {
+                renderRanking();
+                document.getElementById('ranking-menu').classList.remove('hidden');
+            } else if (screen === 'game') {
+                document.getElementById('game-ui').classList.remove('hidden');
+                document.getElementById('mobile-ui').classList.remove('hidden');
+                game.paused = false;
+            }
+        }
+
+        function renderMapGrid() {
+            const grid = document.getElementById('map-grid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= MAX_LEVELS; i++) {
+                const isLocked = i > gameData.unlocked;
+                const stats = gameData.stats[i];
+                const card = document.createElement('div');
+                card.className = `map-card ${isLocked ? 'locked' : ''} ${stats ? 'best' : ''}`;
+                card.innerHTML = `
+                    <div class="text-[9px] font-bold">SECTOR ${i}</div>
+                    <div class="text-[7px] mt-2 text-gray-400">
+                        ${stats ? `🏆 ${formatTime(stats.time)}<br>☠ ${stats.deaths}` : (isLocked ? 'BLOQUEADO' : 'LISTO')}
+                    </div>
+                `;
+                if (!isLocked) {
+                    card.onclick = () => {
+                        audio.init();
+                        generateLevel(i - 1);
+                        showScreen('game');
+                    };
+                }
+                grid.appendChild(card);
+            }
+        }
+
+        function renderRanking() {
+            const body = document.getElementById('ranking-body');
+            body.innerHTML = '';
+            for (let i = 1; i <= MAX_LEVELS; i++) {
+                const stats = gameData.stats[i];
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>MAPA ${i}</td>
+                    <td class="text-cyan-400">${stats ? formatTime(stats.time) : '--:--:--'}</td>
+                    <td class="text-red-500">${stats ? stats.deaths : '0'}</td>
+                    <td class="${stats ? 'text-green-400' : 'text-gray-600'}">${stats ? 'SUPERADO' : 'PENDIENTE'}</td>
+                `;
+                body.appendChild(row);
+            }
+        }
+
         function loop() {
-            update();
-            draw();
+            update(); draw();
             requestAnimationFrame(loop);
         }
 
-        // Input
         window.onkeydown = e => game.keys[e.code] = true;
         window.onkeyup = e => game.keys[e.code] = false;
 
@@ -557,13 +609,9 @@
         };
         setupBtn('mLeft', 'KeyA'); setupBtn('mRight', 'KeyD'); setupBtn('mJump', 'mJump');
 
-        document.getElementById('startBtn').onclick = () => {
-            audio.init();
-            document.getElementById('overlay').classList.add('hidden');
-            game.paused = false;
-            generateLevel(0);
-            loop();
-        };
+        // Iniciar en menu principal
+        loop();
+        showScreen('main');
 
     </script>
 </body>
