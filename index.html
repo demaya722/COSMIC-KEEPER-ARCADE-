@@ -3,450 +3,568 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cosmic Keeper Deluxe - 20 Niveles</title>
+    <title>Cosmic Keeper - Pro Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&display=swap');
         
         :root {
-            --neon-cyan: #0ff;
-            --neon-magenta: #f0f;
-            --bg-dark: #050510;
+            --neon-cyan: #00f2ff;
+            --neon-magenta: #ff00ea;
+            --bg-dark: #05050a;
         }
 
         body { 
             background: var(--bg-dark); 
             color: #fff; 
-            font-family: 'Press+Start+2P', cursive; 
+            font-family: 'Orbitron', sans-serif; 
             margin: 0; 
             overflow: hidden; 
-            touch-action: none; 
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 60px rgba(0, 242, 255, 0.2);
+            background: #000;
+            border: 4px solid #1a1a2e;
         }
 
         canvas { 
             display: block; 
-            image-rendering: pixelated; 
-            margin: 0 auto; 
-            background: #000;
-            border: 4px solid rgba(255, 255, 255, 0.2);
+            image-rendering: auto; 
         }
 
-        .ui-panel { 
-            pointer-events: none; 
-            position: absolute; 
-            width: 100%; 
-            max-width: 640px;
-            top: 20px; 
-            padding: 0 20px; 
-            z-index: 20; 
-            display: flex; 
-            justify-content: space-between; 
-            font-size: 9px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-shadow: 2px 2px 0px #000;
+        .crt-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 4px 100%;
+            pointer-events: none;
+            z-index: 10;
         }
 
-        .energy-bar-wrap { 
-            width: 100px; 
-            height: 10px; 
-            border: 2px solid #fff; 
-            background: #111;
-            margin-top: 4px;
+        .ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 20;
+            text-shadow: 0 0 5px #000;
         }
 
-        #energy-fill { 
-            width: 100%; 
-            height: 100%; 
+        .energy-bar-container {
+            width: 160px;
+            height: 16px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #444;
+            padding: 2px;
+            border-radius: 4px;
+        }
+
+        #energy-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0088ff, var(--neon-cyan));
+            box-shadow: 0 0 15px var(--neon-cyan);
+            width: 100%;
+            transition: width 0.1s ease-out;
+            border-radius: 1px;
+        }
+
+        .btn-retro {
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%);
+            border: 2px solid var(--neon-cyan);
+            padding: 15px 30px;
+            color: var(--neon-cyan);
+            font-family: 'Press Start 2P', cursive;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn-retro:hover { 
             background: var(--neon-cyan); 
-            box-shadow: 0 0 10px var(--neon-cyan);
+            color: #000;
+            box-shadow: 0 0 20px var(--neon-cyan);
         }
 
-        .crt-scanlines { 
-            pointer-events: none; 
-            position: absolute; 
-            inset: 0; 
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%); 
-            background-size: 100% 4px; 
-            z-index: 30; 
-        }
-
-        .btn-control { 
-            background: rgba(255,255,255,0.1); 
-            border: 2px solid #fff; 
-            border-radius: 50%; 
-            width: 60px; 
-            height: 60px; 
-            display: flex; 
-            align-items: center; 
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 2, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
         }
 
-        .pixel-border {
-            border: 4px solid #fff;
-            padding: 20px;
-            background: #050510;
-            box-shadow: 8px 8px 0px var(--neon-magenta);
-        }
+        .hidden { display: none !important; }
+
+        .stat-label { font-size: 10px; color: #888; margin-bottom: 2px; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #fff; }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen">
+<body>
 
-    <div class="ui-panel">
-        <div>NIVEL: <span id="lvl-num">1</span>/20<br><span id="biome-name" style="color: #f0f">ESTACIÓN ALFA</span><br><span id="cell-count" style="color: #0ff">NODOS: 0/0</span></div>
-        <div class="flex flex-col items-end">
-            <div>JETPACK</div>
-            <div class="energy-bar-wrap"><div id="energy-fill"></div></div>
+    <div id="game-container">
+        <div class="ui-layer">
+            <div>
+                <div class="stat-label">MISIÓN ACTUAL</div>
+                <div class="stat-value">SECTOR <span id="lvl-ui">1</span>/20</div>
+                <div id="biome-ui" class="text-[10px] mt-1 font-bold">CARGANDO...</div>
+            </div>
+            <div class="text-right">
+                <div class="stat-label">SISTEMAS DE JETPACK</div>
+                <div class="energy-bar-container">
+                    <div id="energy-fill"></div>
+                </div>
+                <div id="nodes-ui" class="mt-2 text-[12px] text-cyan-400 font-bold">NODOS: 0/0</div>
+            </div>
         </div>
-    </div>
-
-    <div class="relative">
-        <div class="crt-scanlines"></div>
+        <div class="crt-overlay"></div>
         <canvas id="gameCanvas"></canvas>
     </div>
 
-    <!-- Controles Móvil -->
-    <div class="mt-6 flex gap-10 md:hidden">
-        <div class="flex gap-3">
-            <button id="mLeft" class="btn-control">◀</button>
-            <button id="mRight" class="btn-control">▶</button>
+    <!-- Controles Móviles -->
+    <div class="fixed bottom-8 left-0 right-0 flex justify-between px-8 md:hidden z-50">
+        <div class="flex gap-4">
+            <div id="mLeft" class="btn-retro !p-6 flex items-center justify-center">◀</div>
+            <div id="mRight" class="btn-retro !p-6 flex items-center justify-center">▶</div>
         </div>
-        <button id="mJump" class="btn-control" style="background: #066">JET</button>
+        <div id="mJump" class="btn-retro !px-10 flex items-center justify-center">VUELO</div>
     </div>
 
-    <div id="overlay" class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center text-center p-6">
-        <div class="pixel-border max-w-sm">
-            <h1 id="ov-title" class="text-xl text-cyan-400 mb-4">COSMIC KEEPER DELUXE</h1>
-            <p id="ov-msg" class="text-[8px] mb-6 leading-loose">
-                20 SECTORES • 10 BIOMAS • AMENAZA DROID<br><br>
-                RECOGE LOS NÚCLEOS Y EVITA A LOS CENTINELAS.
+    <div id="overlay" class="overlay">
+        <h1 class="text-5xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">COSMIC KEEPER</h1>
+        <p class="text-magenta-500 font-bold mb-8 tracking-[0.3em]">OPERACIÓN: LIMPIEZA DE VACÍO</p>
+        
+        <div class="bg-slate-900/50 p-6 rounded-lg border border-slate-800 mb-8 max-w-md">
+            <p id="ov-msg" class="text-sm leading-relaxed text-slate-300">
+                El sistema de seguridad ha fallado. Recolecta los núcleos de datos para abrir el portal interdimensional.
+                <br><br>
+                <span class="text-cyan-400">WASD</span> o <span class="text-cyan-400">FLECHAS</span> para moverte.<br>
+                Mantén <span class="text-cyan-400">ESPACIO</span> para activar el Jetpack.
             </p>
-            <button id="startBtn" class="bg-white text-black px-6 py-3 text-[10px] hover:bg-cyan-400">INICIAR OPERACIÓN</button>
         </div>
+
+        <button id="startBtn" class="btn-retro">INICIAR PROTOCOLO</button>
     </div>
 
     <script>
         /** @type {HTMLCanvasElement} */
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const energyFill = document.getElementById('energy-fill');
-        const lvlNum = document.getElementById('lvl-num');
-        const biomeNameEl = document.getElementById('biome-name');
-        const cellCountEl = document.getElementById('cell-count');
-        const overlay = document.getElementById('overlay');
-        const startBtn = document.getElementById('startBtn');
+        canvas.width = 800;
+        canvas.height = 450;
 
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSfx(f, d, t='square', vol=0.05) {
-            try {
-                const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-                o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
-                g.gain.setValueAtTime(vol, audioCtx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
-                o.connect(g); g.connect(audioCtx.destination);
-                o.start(); o.stop(audioCtx.currentTime + d);
-            } catch(e) {}
+        const BIOMES = [
+            { name: "NÚCLEO DE LA ESTACIÓN", wall: "#16213e", border: "#00d2ff", bg: "#020205", node: "#00f2ff" },
+            { name: "CÁMARA DE NEBULA", wall: "#2d132c", border: "#ff00ea", bg: "#050205", node: "#ff00ea" },
+            { name: "MINA DE CRISTAL", wall: "#1b262c", border: "#0f4c75", bg: "#020505", node: "#3282b8" },
+            { name: "VOID ZERO", wall: "#111", border: "#444", bg: "#000", node: "#fff" }
+        ];
+
+        const audio = {
+            ctx: null,
+            init() { if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+            play(f, d, v, t='sine', s=0) {
+                if(!this.ctx) return;
+                try {
+                    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+                    o.type = t; o.frequency.setValueAtTime(f, this.ctx.currentTime);
+                    if(s) o.frequency.exponentialRampToValueAtTime(f+s, this.ctx.currentTime + d);
+                    g.gain.setValueAtTime(v, this.ctx.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + d);
+                    o.connect(g); g.connect(this.ctx.destination);
+                    o.start(); o.stop(this.ctx.currentTime + d);
+                } catch(e) {}
+            }
+        };
+
+        const player = {
+            x: 100, y: 100, vx: 0, vy: 0,
+            w: 22, h: 30,
+            speed: 0.5, // Ajustado para ser más realista y menos "loco"
+            maxSpeed: 4.5,
+            friction: 0.85,
+            gravity: 0.28,
+            jumpForce: 0.55,
+            energy: 100,
+            grounded: false,
+            flip: false,
+            
+            update(tiles) {
+                // Movimiento horizontal
+                if (game.keys['ArrowLeft'] || game.keys['KeyA'] || game.keys['mLeft']) {
+                    this.vx -= this.speed;
+                    this.flip = true;
+                } else if (game.keys['ArrowRight'] || game.keys['KeyD'] || game.keys['mRight']) {
+                    this.vx += this.speed;
+                    this.flip = false;
+                } else {
+                    this.vx *= this.friction;
+                }
+
+                // Limitar velocidad horizontal
+                if(Math.abs(this.vx) > this.maxSpeed) this.vx = Math.sign(this.vx) * this.maxSpeed;
+
+                // Jetpack
+                const isJumping = game.keys['Space'] || game.keys['ArrowUp'] || game.keys['KeyW'] || game.keys['mJump'];
+                if (isJumping && this.energy > 0) {
+                    this.vy -= this.jumpForce;
+                    this.energy -= 0.8;
+                    if(Math.random() > 0.3) spawnPart(this.x + this.w/2, this.y + this.h, '#00f2ff');
+                    if(Math.random() > 0.9) audio.play(150, 0.05, 0.02, 'sawtooth');
+                } else if(this.grounded) {
+                    this.energy = Math.min(100, this.energy + 1.5);
+                }
+
+                this.vy += this.gravity;
+                
+                // Colisiones Robustas por Eje
+                // Eje X
+                this.x += this.vx;
+                this.resolveCollisions(tiles, 'x');
+                
+                // Eje Y
+                this.y += this.vy;
+                this.grounded = false;
+                this.resolveCollisions(tiles, 'y');
+
+                // Límites de la pantalla
+                if(this.x < 0) this.x = 0;
+                if(this.x + this.w > game.mapW) this.x = game.mapW - this.w;
+                if(this.y < 0) { this.y = 0; this.vy = 0; }
+                if(this.y + this.h > game.mapH) { this.y = game.mapH - this.h; this.vy = 0; this.grounded = true; }
+            },
+
+            resolveCollisions(tiles, axis) {
+                for(let t of tiles) {
+                    if(t.type !== 'wall') continue;
+                    if(this.x < t.x + t.w && this.x + this.w > t.x && this.y < t.y + t.h && this.y + this.h > t.y) {
+                        if(axis === 'x') {
+                            if(this.vx > 0) this.x = t.x - this.w;
+                            else if(this.vx < 0) this.x = t.x + t.w;
+                            this.vx = 0;
+                        } else {
+                            if(this.vy > 0) {
+                                this.y = t.y - this.h;
+                                this.grounded = true;
+                            } else if(this.vy < 0) {
+                                this.y = t.y + t.h;
+                            }
+                            this.vy = 0;
+                        }
+                    }
+                }
+            },
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x - game.cameraX, this.y);
+                
+                // Efecto de brillo
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(0, 242, 255, 0.5)';
+
+                // Traje
+                ctx.fillStyle = '#e1e1e1';
+                ctx.fillRect(0, 0, this.w, this.h);
+                
+                // Visor
+                ctx.fillStyle = '#1a1a2e';
+                const visorX = this.flip ? 2 : 12;
+                ctx.fillRect(visorX, 5, 8, 8);
+                
+                // Detalle neon en el casco
+                ctx.fillStyle = '#00f2ff';
+                ctx.fillRect(visorX, 5, 8, 2);
+
+                // Mochila
+                ctx.fillStyle = '#888';
+                const packX = this.flip ? this.w - 4 : -4;
+                ctx.fillRect(packX, 10, 8, 15);
+
+                ctx.restore();
+            }
+        };
+
+        let game = {
+            lvl: 0, nodes: 0, needed: 0,
+            paused: true, cameraX: 0,
+            mapW: 0, mapH: 450,
+            keys: {}, particles: [], enemies: [], stars: [], tiles: [],
+            portal: { x: 0, y: 0, active: false, size: 60 }
+        };
+
+        function spawnPart(x, y, c) {
+            game.particles.push({ 
+                x, y, 
+                vx: (Math.random()-0.5)*2, 
+                vy: Math.random()*2, 
+                l: 1.0, 
+                c 
+            });
         }
 
-        const TILE_SIZE = 32;
-        canvas.width = 640;
-        canvas.height = 384;
-
-        // Biomas: 10 temas diferentes (cada 2 niveles cambia)
-        const BIOMES = [
-            { name: "ESTACIÓN ALFA", wall: "#1a1a40", border: "#4a4a80", bg: "#050510" },
-            { name: "CUEVAS DE CRISTAL", wall: "#3a1a40", border: "#8a4a80", bg: "#0d0510" },
-            { name: "NÚCLEO VOLCÁNICO", wall: "#401a1a", border: "#804a4a", bg: "#100505" },
-            { name: "MINAS DE NEÓN", wall: "#1a401a", border: "#4a804a", bg: "#051005" },
-            { name: "CIUDAD DE HIERRO", wall: "#222", border: "#444", bg: "#0a0a0a" },
-            { name: "BASE CIBERNÉTICA", wall: "#002244", border: "#00ffff", bg: "#000510" },
-            { name: "ABISMO ESTELAR", wall: "#111", border: "#f0f", bg: "#050010" },
-            { name: "FÁBRICA DE DROIDES", wall: "#332211", border: "#ffaa00", bg: "#0f0a05" },
-            { name: "SANTUARIO VACÍO", wall: "#444", border: "#fff", bg: "#000" },
-            { name: "NÚCLEO COSMOS", wall: "#000", border: "#0ff", bg: "#050510" }
-        ];
-
-        // Mapas: Generaremos 20 niveles variados
-        const maps = [
-            ["1111111111", "1P00000001", "10C000C001", "1110011101", "1000000001", "10C011C00E", "1111111111"], // L1
-            ["1111111111", "1P00000001", "11100C0001", "1000111001", "10C00C0001", "111100011E", "1111111111"], // L2
-            // ... (Abreviado para el código, se generarán lógicamente los 20)
-        ];
-
-        // Lógica de niveles dinámica para asegurar los 20 niveles
-        function getLevelData(idx) {
-            const biomeIdx = Math.floor(idx / 2);
-            const biome = BIOMES[biomeIdx % BIOMES.length];
+        function generateLevel(idx) {
+            game.lvl = idx + 1;
+            game.nodes = 0;
+            game.needed = 6 + Math.floor(idx * 1.2);
+            game.mapW = 1200 + (idx * 200);
+            game.tiles = []; game.enemies = []; game.particles = [];
+            game.portal.active = false;
             
-            // Generación de patrones de mapa para 20 niveles
-            const width = 25 + idx;
-            const height = 12;
-            let levelMap = Array(height).fill().map(() => Array(width).fill('0'));
-            
-            // Paredes
-            for(let i=0; i<width; i++) { levelMap[0][i] = '1'; levelMap[height-1][i] = '1'; }
-            for(let i=0; i<height; i++) { levelMap[i][0] = '1'; levelMap[i][width-1] = '1'; }
+            const biome = BIOMES[idx % BIOMES.length];
+            document.getElementById('lvl-ui').innerText = game.lvl;
+            document.getElementById('biome-ui').innerText = biome.name;
+            document.getElementById('biome-ui').style.color = biome.border;
 
-            // Lógica de llenado básico
-            levelMap[2][2] = 'P';
-            levelMap[height-2][width-2] = 'E';
-            
-            let cells = 0;
-            for(let i=0; i<3 + Math.floor(idx/2); i++) {
-                let rx = Math.floor(Math.random()*(width-4))+2;
-                let ry = Math.floor(Math.random()*(height-4))+2;
-                if(levelMap[ry][rx] === '0') { levelMap[ry][rx] = 'C'; cells++; }
-                // Plataformas bajo las celdas
-                if(ry < height-2) levelMap[ry+1][rx] = '1';
+            // Suelo y techo sólidos
+            for(let x=0; x < game.mapW; x += 40) {
+                game.tiles.push({ x, y: 0, w: 40, h: 40, type: 'wall' });
+                game.tiles.push({ x, y: game.mapH - 40, w: 40, h: 40, type: 'wall' });
             }
 
-            // Enemigos (a partir del nivel 3)
-            let enemyPositions = [];
-            if(idx >= 2) {
-                for(let i=0; i < Math.min(6, 1 + Math.floor(idx/3)); i++) {
-                    enemyPositions.push({
-                        x: (Math.floor(Math.random()*(width-10))+8)*TILE_SIZE,
-                        y: (Math.floor(Math.random()*(height-4))+2)*TILE_SIZE,
-                        type: idx % 2 === 0 ? 'patrol' : 'float'
-                    });
+            // Generar plataformas aleatorias asegurando que no se bloqueen
+            for(let i=0; i < 25 + (idx*5); i++) {
+                let px = 200 + Math.random() * (game.mapW - 400);
+                let py = 100 + Math.random() * (game.mapH - 200);
+                game.tiles.push({ x: px, y: py, w: 80, h: 20, type: 'wall' });
+            }
+
+            // Respawn de Nodos (dentro del mapa, no en paredes)
+            let nodesCreated = 0;
+            while(nodesCreated < game.needed) {
+                let nx = 150 + Math.random() * (game.mapW - 300);
+                let ny = 60 + Math.random() * (game.mapH - 120);
+                
+                // Verificar que no esté dentro de una pared
+                let inside = game.tiles.some(t => nx > t.x-20 && nx < t.x+t.w+20 && ny > t.y-20 && ny < t.y+t.h+20);
+                if(!inside) {
+                    game.tiles.push({ x: nx, y: ny, type: 'node', active: true, phase: Math.random()*10 });
+                    nodesCreated++;
                 }
             }
 
-            return { map: levelMap.map(r => r.join('')), cellsNeeded: cells, biome, enemies: enemyPositions };
-        }
-
-        let player = { 
-            x: 0, y: 0, vx: 0, vy: 0, w: 18, h: 24, 
-            energy: 100, cells: 0, grounded: false, flip: false,
-            animFrame: 0, tilt: 0 
-        };
-        
-        let currentLvlIdx = 0;
-        let activeLevel = null;
-        let tiles = [], enemies = [], particles = [];
-        let portal = { x: 0, y: 0, active: false };
-        let camera = { x: 0, y: 0 };
-        let keys = {};
-
-        function initLevel(idx) {
-            activeLevel = getLevelData(idx);
-            tiles = [];
-            enemies = [];
-            particles = [];
-            player.cells = 0;
-            player.energy = 100;
-            portal.active = false;
-            
-            lvlNum.innerText = idx + 1;
-            biomeNameEl.innerText = activeLevel.biome.name;
-            biomeNameEl.style.color = activeLevel.biome.border;
-
-            activeLevel.map.forEach((row, r) => {
-                row.split('').forEach((char, c) => {
-                    const x = c * TILE_SIZE; const y = r * TILE_SIZE;
-                    if (char === '1') tiles.push({ x, y, type: 'block' });
-                    if (char === 'P') { player.x = x; player.y = y; }
-                    if (char === 'C') tiles.push({ x, y, type: 'cell', active: true });
-                    if (char === 'E') { portal.x = x; portal.y = y; }
+            // Enemigos (Drones patrulleros)
+            let enemyCount = 5 + Math.floor(idx * 1.5);
+            for(let i=0; i< enemyCount; i++) {
+                game.enemies.push({
+                    x: 400 + Math.random() * (game.mapW - 600),
+                    y: 60 + Math.random() * (game.mapH - 120),
+                    vx: (1.5 + (idx * 0.15)) * (Math.random() > 0.5 ? 1 : -1),
+                    vy: (Math.random() - 0.5) * 1,
+                    range: 150 + Math.random() * 100,
+                    originX: 0,
+                    update() {
+                        if(this.originX === 0) this.originX = this.x;
+                        this.x += this.vx;
+                        this.y += Math.sin(Date.now() / 500) * 0.5; // Movimiento flotante
+                        if(Math.abs(this.x - this.originX) > this.range) this.vx *= -1;
+                    }
                 });
-            });
+            }
 
-            activeLevel.enemies.forEach(en => {
-                enemies.push({
-                    x: en.x, y: en.y, w: 24, h: 24,
-                    startX: en.x, range: 100 + Math.random()*100,
-                    vx: 1.5 + (idx*0.1), vy: 0, type: en.type,
-                    phase: Math.random() * Math.PI * 2
-                });
-            });
-            updateUI();
-        }
+            game.portal.x = game.mapW - 150;
+            game.portal.y = game.mapH / 2 - 30;
+            player.x = 100;
+            player.y = game.mapH - 100;
+            player.vx = player.vy = 0;
 
-        function updateUI() {
-            cellCountEl.innerText = `NODOS: ${player.cells}/${activeLevel.cellsNeeded}`;
+            game.stars = Array(200).fill().map(() => ({
+                x: Math.random()*canvas.width, y: Math.random()*canvas.height, 
+                s: Math.random()*2, p: 0.1 + Math.random()*0.3
+            }));
         }
 
         function update() {
-            if (overlay.offsetParent !== null) return;
+            if(game.paused) return;
 
-            // Movimiento e inclinación animada
-            let moving = false;
-            if (keys['ArrowLeft'] || keys['KeyA']) { 
-                player.vx -= 0.6; player.flip = true; player.tilt = -0.2; moving = true;
-            }
-            if (keys['ArrowRight'] || keys['KeyD']) { 
-                player.vx += 0.6; player.flip = false; player.tilt = 0.2; moving = true;
-            }
-            if(!moving) player.tilt *= 0.8;
+            player.update(game.tiles);
 
-            // Jetpack
-            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['mJump']) && player.energy > 0) {
-                player.vy -= 1.1; player.energy -= 0.8;
-                if(Math.random() > 0.5) spawnPart(player.x+player.w/2, player.y+player.h, '#0ff', 1);
-                if(Math.random() > 0.9) playSfx(100+Math.random()*100, 0.05, 'sawtooth', 0.02);
-            } else if (player.grounded) {
-                player.energy = Math.min(100, player.energy + 0.6);
-            }
-
-            player.vx *= 0.88; player.vy += 0.45;
-            player.x += player.vx;
-            checkCols(true);
-            player.y += player.vy;
-            player.grounded = false;
-            checkCols(false);
-
-            // Enemigos
-            enemies.forEach(en => {
-                if(en.type === 'patrol') {
-                    en.x += en.vx;
-                    if(Math.abs(en.x - en.startX) > en.range) en.vx *= -1;
-                } else {
-                    en.phase += 0.05;
-                    en.y += Math.sin(en.phase) * 2;
+            // Colisión con Nodos
+            game.tiles.forEach(t => {
+                if(t.type === 'node' && t.active) {
+                    if(Math.hypot(player.x + player.w/2 - t.x, player.y + player.h/2 - t.y) < 30) {
+                        t.active = false;
+                        game.nodes++;
+                        audio.play(440 + (game.nodes * 40), 0.1, 0.05, 'sine', 200);
+                        for(let i=0; i<8; i++) spawnPart(t.x, t.y, '#fff');
+                        if(game.nodes >= game.needed) {
+                            game.portal.active = true;
+                            audio.play(200, 0.5, 0.1, 'square', 400);
+                        }
+                    }
                 }
+            });
 
-                if(Math.abs(player.x - en.x) < 20 && Math.abs(player.y - en.y) < 20) die();
+            // Colisión con Enemigos
+            game.enemies.forEach(e => {
+                e.update();
+                if(Math.hypot(player.x + player.w/2 - e.x, player.y + player.h/2 - e.y) < 25) {
+                    audio.play(60, 0.5, 0.2, 'sawtooth', -20);
+                    generateLevel(game.lvl - 1);
+                }
             });
 
             // Portal
-            if(portal.active && Math.abs(player.x - portal.x) < 24 && Math.abs(player.y - portal.y) < 24) {
-                playSfx(1200, 0.3, 'sine');
-                currentLvlIdx++;
-                if(currentLvlIdx >= 20) victory();
-                else initLevel(currentLvlIdx);
+            if(game.portal.active && Math.hypot(player.x + player.w/2 - (game.portal.x + 30), player.y + player.h/2 - (game.portal.y + 30)) < 40) {
+                audio.play(800, 0.6, 0.1, 'sine', 400);
+                if(game.lvl >= 20) {
+                    game.paused = true;
+                    document.getElementById('overlay').classList.remove('hidden');
+                    document.querySelector('h1').innerText = "MISIÓN CUMPLIDA";
+                    document.getElementById('ov-msg').innerText = "Has estabilizado todos los sectores galácticos.";
+                } else {
+                    generateLevel(game.lvl);
+                }
             }
 
             // Cámara suave
-            camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
-            camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
-
+            let targetCam = player.x - canvas.width/2;
+            game.cameraX += (targetCam - game.cameraX) * 0.1;
+            game.cameraX = Math.max(0, Math.min(game.cameraX, game.mapW - canvas.width));
+            
             // Partículas
-            for(let i=particles.length-1; i>=0; i--) {
-                particles[i].x += particles[i].vx; 
-                particles[i].y += particles[i].vy; 
-                particles[i].l -= 0.03;
-                if(particles[i].l <= 0) particles.splice(i, 1);
+            for(let i=game.particles.length-1; i>=0; i--){
+                let p = game.particles[i];
+                p.x += p.vx; p.y += p.vy; p.l -= 0.02;
+                if(p.l <= 0) game.particles.splice(i, 1);
             }
 
-            energyFill.style.width = player.energy + '%';
-            player.animFrame += 0.1;
-        }
-
-        function checkCols(horiz) {
-            tiles.forEach(t => {
-                if(t.type === 'block') {
-                    if(player.x < t.x + TILE_SIZE && player.x + player.w > t.x &&
-                       player.y < t.y + TILE_SIZE && player.y + player.h > t.y) {
-                        if(horiz) {
-                            player.x = player.vx > 0 ? t.x - player.w : t.x + TILE_SIZE;
-                            player.vx = 0;
-                        } else {
-                            if(player.vy > 0) { player.y = t.y - player.h; player.grounded = true; }
-                            else { player.y = t.y + TILE_SIZE; }
-                            player.vy = 0;
-                        }
-                    }
-                } else if(!horiz && t.type === 'cell' && t.active) {
-                    if(player.x < t.x+24 && player.x+player.w > t.x+8 && player.y < t.y+24 && player.y+player.h > t.y+8) {
-                        t.active = false; player.cells++;
-                        playSfx(800, 0.1, 'sine');
-                        for(let i=0; i<6; i++) spawnPart(t.x+16, t.y+16, '#0ff', 3);
-                        updateUI();
-                        if(player.cells >= activeLevel.cellsNeeded) portal.active = true;
-                    }
-                }
-            });
-        }
-
-        function spawnPart(x, y, c, s) {
-            particles.push({x, y, vx:(Math.random()-0.5)*s, vy:(Math.random()-0.5)*s, l:1, c});
-        }
-
-        function die() {
-            playSfx(50, 0.4, 'sawtooth');
-            initLevel(currentLvlIdx);
+            // UI
+            document.getElementById('energy-fill').style.width = player.energy + '%';
+            document.getElementById('nodes-ui').innerText = `NODOS: ${game.nodes}/${game.needed}`;
+            document.getElementById('energy-fill').style.filter = player.energy < 25 ? 'hue-rotate(-100deg)' : 'none';
         }
 
         function draw() {
-            ctx.fillStyle = activeLevel.biome.bg;
-            ctx.fillRect(0,0,canvas.width,canvas.height);
+            const biome = BIOMES[(game.lvl-1)%BIOMES.length];
+            
+            // Limpiar fondo
+            ctx.fillStyle = biome.bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Estrellas (Parallax)
+            ctx.fillStyle = "#fff";
+            game.stars.forEach(s => {
+                let sx = (s.x - game.cameraX * s.p) % canvas.width;
+                if(sx < 0) sx += canvas.width;
+                ctx.fillRect(sx, s.y, s.s, s.s);
+            });
 
             ctx.save();
-            ctx.translate(-camera.x, -camera.y);
+            ctx.translate(-game.cameraX, 0);
 
-            // Tiles
-            tiles.forEach(t => {
-                if(t.type === 'block') {
-                    ctx.fillStyle = activeLevel.biome.wall;
-                    ctx.fillRect(t.x, t.y, TILE_SIZE, TILE_SIZE);
-                    ctx.strokeStyle = activeLevel.biome.border;
-                    ctx.strokeRect(t.x+2, t.y+2, TILE_SIZE-4, TILE_SIZE-4);
+            // Dibujar Paredes
+            game.tiles.forEach(t => {
+                if(t.type === 'wall') {
+                    ctx.fillStyle = biome.wall;
+                    ctx.fillRect(t.x, t.y, t.w, t.h);
+                    ctx.strokeStyle = biome.border;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(t.x + 2, t.y + 2, t.w - 4, t.h - 4);
                 } else if(t.active) {
-                    ctx.fillStyle = '#0ff';
-                    const s = 10 + Math.sin(player.animFrame)*3;
-                    ctx.fillRect(t.x+16-s/2, t.y+16-s/2, s, s);
+                    // Dibujar Nodo mejorado
+                    const bounce = Math.sin(Date.now()/200 + t.phase) * 5;
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = biome.node;
+                    ctx.fillStyle = biome.node;
+                    // Núcleo
+                    ctx.beginPath();
+                    ctx.arc(t.x, t.y + bounce, 8, 0, Math.PI*2);
+                    ctx.fill();
+                    // Anillo
+                    ctx.strokeStyle = "#fff";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.ellipse(t.x, t.y + bounce, 15, 6, Math.PI/4 + Date.now()/500, 0, Math.PI*2);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
                 }
             });
 
+            // Dibujar Enemigos (Drones)
+            game.enemies.forEach(e => {
+                ctx.fillStyle = '#ff4d4d';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = 'red';
+                // Cuerpo drone
+                ctx.fillRect(e.x - 12, e.y - 12, 24, 24);
+                // "Ojo"
+                ctx.fillStyle = '#fff';
+                let eyeOffset = Math.sign(e.vx) * 5;
+                ctx.fillRect(e.x - 2 + eyeOffset, e.y - 4, 4, 8);
+                ctx.shadowBlur = 0;
+            });
+
             // Portal
-            if(portal.active) {
-                ctx.strokeStyle = '#f0f'; ctx.lineWidth = 3;
-                ctx.strokeRect(portal.x+4, portal.y+4, 24, 24);
-                if(Math.random()>0.8) spawnPart(portal.x+16, portal.y+16, '#f0f', 2);
+            if(game.portal.active) {
+                const s = 60 + Math.sin(Date.now()/150) * 10;
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#ff00ea';
+                ctx.strokeStyle = '#ff00ea';
+                ctx.lineWidth = 5;
+                ctx.strokeRect(game.portal.x + (60-s)/2, game.portal.y + (60-s)/2, s, s);
+                
+                // Efecto de vórtice
+                ctx.lineWidth = 2;
+                ctx.strokeRect(game.portal.x + 10, game.portal.y + 10, 40, 40);
+                ctx.shadowBlur = 0;
             }
 
-            // Enemigos
-            enemies.forEach(en => {
-                ctx.fillStyle = '#f00';
-                ctx.fillRect(en.x, en.y, en.w, en.h);
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(en.x + (en.vx > 0 ? 16 : 4), en.y + 6, 4, 4);
+            // Partículas
+            game.particles.forEach(p => {
+                ctx.globalAlpha = p.l;
+                ctx.fillStyle = p.c;
+                ctx.fillRect(p.x, p.y, 3, 3);
             });
+            ctx.globalAlpha = 1;
 
-            // Jugador animado
-            ctx.save();
-            ctx.translate(player.x + player.w/2, player.y + player.h/2);
-            ctx.rotate(player.tilt);
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
-            ctx.fillStyle = '#333';
-            const visorX = player.flip ? -player.w/2 : player.w/2 - 8;
-            ctx.fillRect(visorX, -player.h/2 + 4, 8, 6);
             ctx.restore();
-
-            particles.forEach(p => {
-                ctx.globalAlpha = p.l; ctx.fillStyle = p.c;
-                ctx.fillRect(p.x, p.y, 2, 2);
-            });
-            ctx.restore();
+            
+            // El jugador se dibuja relativo a la cámara dentro de su función
+            player.draw();
         }
 
-        function victory() {
-            overlay.classList.remove('hidden');
-            document.getElementById('ov-title').innerText = "MISIÓN COMPLETA";
-            document.getElementById('ov-msg').innerText = "EL COSMOS ESTÁ A SALVO GRACIAS A TI.";
-            startBtn.innerText = "REINICIAR";
-            startBtn.onclick = () => location.reload();
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
         }
 
-        window.addEventListener('keydown', e => keys[e.code] = true);
-        window.addEventListener('keyup', e => keys[e.code] = false);
-        const m = (id, k) => {
-            const b = document.getElementById(id);
-            b.ontouchstart = (e) => { e.preventDefault(); keys[k] = true; };
-            b.ontouchend = (e) => { e.preventDefault(); keys[k] = false; };
+        // Input
+        window.onkeydown = e => game.keys[e.code] = true;
+        window.onkeyup = e => game.keys[e.code] = false;
+
+        const setupBtn = (id, k) => {
+            const el = document.getElementById(id);
+            el.onmousedown = el.ontouchstart = (e) => { e.preventDefault(); game.keys[k] = true; };
+            el.onmouseup = el.ontouchend = (e) => { e.preventDefault(); game.keys[k] = false; };
         };
-        m('mLeft', 'ArrowLeft'); m('mRight', 'ArrowRight'); m('mJump', 'mJump');
+        setupBtn('mLeft', 'KeyA'); setupBtn('mRight', 'KeyD'); setupBtn('mJump', 'mJump');
 
-        startBtn.onclick = () => {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            overlay.classList.add('hidden');
-            initLevel(0);
-            function loop() { update(); draw(); requestAnimationFrame(loop); }
+        document.getElementById('startBtn').onclick = () => {
+            audio.init();
+            document.getElementById('overlay').classList.add('hidden');
+            game.paused = false;
+            generateLevel(0);
             loop();
         };
 
-        initLevel(0); draw();
     </script>
 </body>
 </html>
