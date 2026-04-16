@@ -152,6 +152,18 @@
         }
         .ranking-table th { color: var(--neon-cyan); border-bottom: 2px solid #333; padding: 10px; }
         .ranking-table td { padding: 8px; border-bottom: 1px solid #222; }
+
+        #powerup-msg {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Press Start 2P';
+            font-size: 10px;
+            color: var(--neon-magenta);
+            text-shadow: 0 0 10px var(--neon-magenta);
+            z-index: 30;
+        }
     </style>
 </head>
 <body>
@@ -173,6 +185,8 @@
                 <div id="deaths-ui" class="text-red-500 text-[8px] mt-1">MUERTES: 0</div>
             </div>
         </div>
+
+        <div id="powerup-msg" class="hidden">HABILIDAD ACTIVADA</div>
 
         <div class="crt-overlay"></div>
         <canvas id="gameCanvas"></canvas>
@@ -248,44 +262,40 @@
             { name: "VOID ZERO", wall: "#111", border: "#444", bg: "#000", node: "#fff", detail: "#222" }
         ];
 
-        const audio = {
-            ctx: null,
-            init() { if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
-            play(f, d, v, t='sine', s=0) {
-                if(!this.ctx) return;
-                try {
-                    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
-                    o.type = t; o.frequency.setValueAtTime(f, this.ctx.currentTime);
-                    if(s) o.frequency.exponentialRampToValueAtTime(f+s, this.ctx.currentTime + d);
-                    g.gain.setValueAtTime(v, this.ctx.currentTime);
-                    g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + d);
-                    o.connect(g); g.connect(this.ctx.destination);
-                    o.start(); o.stop(this.ctx.currentTime + d);
-                } catch(e) {}
-            }
-        };
-
         const player = {
             x: 100, y: 100, vx: 0, vy: 0, w: 22, h: 30,
             speed: 0.45, maxSpeed: 4.2, friction: 0.86, gravity: 0.26, jumpForce: 0.52,
             energy: 100, grounded: false, flip: false,
+            // Habilidades
+            powerType: null, powerTimer: 0, hasShield: false,
             
             update(tiles) {
+                let currentMax = this.powerType === 'speed' ? this.maxSpeed * 1.8 : this.maxSpeed;
+                let currentAccel = this.powerType === 'speed' ? this.speed * 1.5 : this.speed;
+
                 if (game.keys['ArrowLeft'] || game.keys['KeyA'] || game.keys['mLeft']) {
-                    this.vx -= this.speed; this.flip = true;
+                    this.vx -= currentAccel; this.flip = true;
                 } else if (game.keys['ArrowRight'] || game.keys['KeyD'] || game.keys['mRight']) {
-                    this.vx += this.speed; this.flip = false;
+                    this.vx += currentAccel; this.flip = false;
                 } else { this.vx *= this.friction; }
 
-                if(Math.abs(this.vx) > this.maxSpeed) this.vx = Math.sign(this.vx) * this.maxSpeed;
+                if(Math.abs(this.vx) > currentMax) this.vx = Math.sign(this.vx) * currentMax;
 
                 const isJumping = game.keys['Space'] || game.keys['ArrowUp'] || game.keys['KeyW'] || game.keys['mJump'];
-                if (isJumping && this.energy > 0) {
+                if (isJumping && (this.energy > 0 || this.powerType === 'battery')) {
                     this.vy -= this.jumpForce;
-                    this.energy -= 0.75;
-                    if(Math.random() > 0.4) spawnPart(this.x + this.w/2, this.y + this.h, '#00f2ff');
+                    if(this.powerType !== 'battery') this.energy -= 0.75;
+                    if(Math.random() > 0.4) spawnPart(this.x + this.w/2, this.y + this.h, this.powerType === 'battery' ? '#fff200' : '#00f2ff');
                 } else if(this.grounded) {
                     this.energy = Math.min(100, this.energy + 1.6);
+                }
+
+                if(this.powerTimer > 0) {
+                    this.powerTimer--;
+                    if(this.powerTimer === 0) {
+                        this.powerType = null;
+                        document.getElementById('powerup-msg').classList.add('hidden');
+                    }
                 }
 
                 this.vy += this.gravity;
@@ -317,13 +327,24 @@
             draw() {
                 ctx.save();
                 ctx.translate(this.x - game.cameraX, this.y);
-                ctx.fillStyle = '#e1e1e1';
+                
+                if(this.hasShield) {
+                    ctx.strokeStyle = '#ff00ea'; ctx.lineWidth = 2;
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#ff00ea';
+                    ctx.beginPath(); ctx.arc(this.w/2, this.h/2, 25, 0, Math.PI*2); ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.fillStyle = this.powerType ? '#fff' : '#e1e1e1';
                 ctx.fillRect(0, 0, this.w, this.h);
+                
                 ctx.fillStyle = '#1a1a2e';
                 const visorX = this.flip ? 2 : 12;
                 ctx.fillRect(visorX, 5, 8, 8);
-                ctx.fillStyle = '#00f2ff';
+                
+                ctx.fillStyle = this.powerType === 'speed' ? '#0ff' : '#00f2ff';
                 ctx.fillRect(visorX, 5, 8, 2);
+                
                 ctx.fillStyle = '#888';
                 const packX = this.flip ? this.w - 4 : -4;
                 ctx.fillRect(packX, 10, 8, 15);
@@ -335,7 +356,7 @@
             lvl: 1, nodes: 0, needed: 0,
             paused: true, cameraX: 0,
             mapW: 0, mapH: 450,
-            keys: {}, particles: [], enemies: [], stars: [], tiles: [],
+            keys: {}, particles: [], enemies: [], projectiles: [], stars: [], tiles: [],
             portal: { x: 0, y: 0, active: false },
             startTime: 0, currentDeaths: 0
         };
@@ -355,60 +376,92 @@
         function generateLevel(idx) {
             game.lvl = idx + 1;
             game.nodes = 0;
-            game.needed = 5 + Math.floor(idx * 0.8);
-            game.mapW = 1600 + (idx * 150);
-            game.tiles = []; game.enemies = []; game.particles = [];
+            game.needed = 4 + Math.floor(idx * 0.8);
+            game.mapW = 1600 + (idx * 200);
+            game.tiles = []; game.enemies = []; game.particles = []; game.projectiles = [];
             game.portal.active = false;
             game.startTime = Date.now();
+            player.powerType = null; player.hasShield = false;
             
             const biome = BIOMES[idx % BIOMES.length];
             document.getElementById('lvl-ui').innerText = game.lvl;
             document.getElementById('nodes-ui').innerText = `NODOS: 0/${game.needed}`;
             document.getElementById('deaths-ui').innerText = `MUERTES: ${game.currentDeaths}`;
+            document.getElementById('powerup-msg').classList.add('hidden');
 
             for(let x=0; x < game.mapW; x += 40) {
                 game.tiles.push({ x, y: 0, w: 40, h: 40, type: 'wall', isBorder: true });
                 game.tiles.push({ x, y: game.mapH - 40, w: 40, h: 40, type: 'wall', isBorder: true });
             }
 
-            const rows = 4;
             const cols = Math.floor(game.mapW / 200);
-            for(let r = 0; r < rows; r++) {
-                for(let c = 1; c < cols; c++) {
-                    if(Math.random() > 0.4) {
+            for(let c = 1; c < cols; c++) {
+                for(let r = 0; r < 3; r++) {
+                    if(Math.random() > 0.3) {
                         game.tiles.push({ 
-                            x: c * 200 + (Math.random() * 50), 
-                            y: (r + 1) * 80 + (Math.random() * 20), 
-                            w: 60 + Math.random() * 100, 
+                            x: c * 200 + (Math.random() * 60), 
+                            y: 100 + r * 100 + (Math.random() * 20), 
+                            w: 80 + Math.random() * 120, 
                             h: 24, type: 'wall' 
                         });
                     }
                 }
             }
 
-            let nodesCreated = 0;
-            while(nodesCreated < game.needed) {
-                let nx = 200 + Math.random() * (game.mapW - 400);
-                let ny = 60 + Math.random() * (game.mapH - 120);
-                if(!game.tiles.some(t => nx > t.x-30 && nx < t.x+t.w+30 && ny > t.y-30 && ny < t.y+t.h+30)) {
-                    game.tiles.push({ x: nx, y: ny, type: 'node', active: true, phase: Math.random()*10 });
-                    nodesCreated++;
-                }
+            const pTypes = ['speed', 'shield', 'battery'];
+            for(let i=0; i<3; i++) {
+                game.tiles.push({
+                    x: 600 + Math.random()*(game.mapW - 1000),
+                    y: 100 + Math.random()*250,
+                    type: 'powerup', pType: pTypes[i], active: true
+                });
             }
 
-            let enemyCount = 6 + Math.floor(idx * 1.2);
+            let nodesCreated = 0;
+            while(nodesCreated < game.needed) {
+                let nx = 300 + Math.random() * (game.mapW - 500);
+                let ny = 80 + Math.random() * (game.mapH - 160);
+                game.tiles.push({ x: nx, y: ny, type: 'node', active: true, rot: Math.random()*Math.PI*2 });
+                nodesCreated++;
+            }
+
+            let enemyCount = 6 + Math.floor(idx * 1.5);
             for(let i=0; i< enemyCount; i++) {
                 game.enemies.push({
-                    x: 500 + Math.random() * (game.mapW - 700),
-                    y: 100 + Math.random() * (game.mapH - 200),
-                    vx: (1.4 + (idx * 0.1)) * (Math.random() > 0.5 ? 1 : -1),
-                    range: 120 + Math.random() * 150, originX: 0,
+                    x: 600 + Math.random() * (game.mapW - 800),
+                    y: 80 + Math.random() * (game.mapH - 180),
+                    vx: (1.6 + (idx * 0.1)),
+                    range: 150, originX: 0,
+                    isChaser: Math.random() > 0.7,
                     update() {
                         if(this.originX === 0) this.originX = this.x;
-                        this.x += this.vx; this.y += Math.sin(Date.now() / 600) * 0.4;
-                        if(Math.abs(this.x - this.originX) > this.range) this.vx *= -1;
+                        let dist = Math.hypot(player.x - this.x, player.y - this.y);
+                        
+                        if(this.isChaser && dist < 200) {
+                            this.x += (player.x - this.x) * 0.02;
+                            this.y += (player.y - this.y) * 0.02;
+                        } else {
+                            this.x += this.vx;
+                            if(Math.abs(this.x - this.originX) > this.range) this.vx *= -1;
+                        }
                     }
                 });
+            }
+
+            if(game.lvl >= 3) {
+                for(let i=0; i<Math.floor(game.lvl/2); i++) {
+                    game.enemies.push({
+                        x: 800 + (i * 600), y: game.mapH - 65, type: 'turret', lastShot: 0,
+                        update() {
+                            let dist = Math.hypot(player.x - this.x, player.y - this.y);
+                            if(dist < 400 && Date.now() - this.lastShot > 2000 - (game.lvl * 50)) {
+                                let angle = Math.atan2(player.y - this.y, player.x - this.x);
+                                game.projectiles.push({x: this.x, y: this.y, vx: Math.cos(angle)*4, vy: Math.sin(angle)*4});
+                                this.lastShot = Date.now();
+                            }
+                        }
+                    });
+                }
             }
 
             game.portal.x = game.mapW - 180;
@@ -416,10 +469,20 @@
             player.x = 120; player.y = game.mapH - 100;
             player.vx = player.vy = 0;
 
-            game.stars = Array(150).fill().map(() => ({
+            game.stars = Array(120).fill().map(() => ({
                 x: Math.random()*canvas.width, y: Math.random()*canvas.height, 
-                s: Math.random()*1.5, p: 0.05 + Math.random()*0.2
+                s: Math.random()*1.5, p: 0.1 + Math.random()*0.2
             }));
+        }
+
+        function hitPlayer() {
+            if(player.hasShield) {
+                player.hasShield = false;
+                for(let i=0; i<15; i++) spawnPart(player.x, player.y, '#ff00ea');
+                return;
+            }
+            game.currentDeaths++;
+            generateLevel(game.lvl - 1);
         }
 
         function update() {
@@ -429,23 +492,39 @@
             const currentTime = Date.now() - game.startTime;
             document.getElementById('timer-ui').innerText = formatTime(currentTime);
 
+            for(let i=game.projectiles.length-1; i>=0; i--) {
+                let p = game.projectiles[i];
+                p.x += p.vx; p.y += p.vy;
+                if(Math.hypot(player.x + 11 - p.x, player.y + 15 - p.y) < 20) {
+                    game.projectiles.splice(i, 1); hitPlayer(); continue;
+                }
+                if(p.x < game.cameraX - 100 || p.x > game.cameraX + 900) game.projectiles.splice(i, 1);
+            }
+
             game.tiles.forEach(t => {
                 if(t.type === 'node' && t.active) {
+                    t.rot += 0.05;
                     if(Math.hypot(player.x + player.w/2 - t.x, player.y + player.h/2 - t.y) < 30) {
                         t.active = false; game.nodes++;
-                        audio.play(400 + (game.nodes * 50), 0.1, 0.06, 'sine', 150);
                         if(game.nodes >= game.needed) game.portal.active = true;
+                    }
+                }
+                if(t.type === 'powerup' && t.active) {
+                    if(Math.hypot(player.x + player.w/2 - t.x, player.y + player.h/2 - t.y) < 30) {
+                        t.active = false;
+                        if(t.pType === 'shield') player.hasShield = true;
+                        else { player.powerType = t.pType; player.powerTimer = 500; }
+                        
+                        let msg = document.getElementById('powerup-msg');
+                        msg.innerText = (t.pType === 'speed' ? "VELOCIDAD++" : (t.pType === 'shield' ? "ESCUDO ACTIVO" : "ENERGÍA INFINITA"));
+                        msg.classList.remove('hidden');
                     }
                 }
             });
 
             game.enemies.forEach(e => {
                 e.update();
-                if(Math.hypot(player.x + player.w/2 - e.x, player.y + player.h/2 - e.y) < 26) {
-                    game.currentDeaths++;
-                    audio.play(50, 0.4, 0.25, 'sawtooth');
-                    generateLevel(game.lvl - 1);
-                }
+                if(Math.hypot(player.x + player.w/2 - e.x, player.y + player.h/2 - e.y) < 26) hitPlayer();
             });
 
             if(game.portal.active && Math.hypot(player.x + player.w/2 - (game.portal.x + 40), player.y + player.h/2 - (game.portal.y + 40)) < 45) {
@@ -470,16 +549,8 @@
         function finishLevel() {
             const finalTime = Date.now() - game.startTime;
             const currentRecord = gameData.stats[game.lvl] || { time: Infinity, deaths: Infinity };
-
-            // Guardar si es mejor tiempo
-            if (finalTime < currentRecord.time) {
-                gameData.stats[game.lvl] = { time: finalTime, deaths: game.currentDeaths };
-            }
-
-            if (game.lvl === gameData.unlocked && gameData.unlocked < MAX_LEVELS) {
-                gameData.unlocked++;
-            }
-
+            if (finalTime < currentRecord.time) gameData.stats[game.lvl] = { time: finalTime, deaths: game.currentDeaths };
+            if (game.lvl === gameData.unlocked && gameData.unlocked < MAX_LEVELS) gameData.unlocked++;
             saveGame();
             game.paused = true;
             game.currentDeaths = 0;
@@ -494,7 +565,7 @@
             game.stars.forEach(s => {
                 let sx = (s.x - game.cameraX * s.p) % canvas.width;
                 if(sx < 0) sx += canvas.width;
-                ctx.fillStyle = "rgba(255,255,255,0.8)";
+                ctx.fillStyle = "rgba(255,255,255,0.6)";
                 ctx.fillRect(sx, s.y, s.s, s.s);
             });
 
@@ -504,26 +575,107 @@
             game.tiles.forEach(t => {
                 if(t.type === 'wall') {
                     ctx.fillStyle = biome.wall; ctx.fillRect(t.x, t.y, t.w, t.h);
-                    ctx.strokeStyle = biome.border; ctx.lineWidth = 1.5; ctx.strokeRect(t.x+1, t.y+1, t.w-2, t.h-2);
-                    if(!t.isBorder) {
-                        ctx.fillStyle = biome.detail; ctx.fillRect(t.x, t.y + t.h/2 - 2, t.w, 4);
+                    ctx.strokeStyle = biome.border; ctx.lineWidth = 1; ctx.strokeRect(t.x, t.y, t.w, t.h);
+                    // Detalle tecnológico en paredes
+                    ctx.fillStyle = biome.detail;
+                    ctx.fillRect(t.x + 5, t.y + 5, 2, 2);
+                    ctx.fillRect(t.x + t.w - 7, t.y + t.h - 7, 2, 2);
+                } else if(t.type === 'node' && t.active) {
+                    // DISEÑO DE NODO MEJORADO
+                    ctx.save();
+                    ctx.translate(t.x, t.y);
+                    ctx.rotate(t.rot);
+                    ctx.shadowBlur = 15; ctx.shadowColor = biome.node;
+                    
+                    // Núcleo
+                    ctx.fillStyle = "#fff";
+                    ctx.fillRect(-6, -6, 12, 12);
+                    
+                    // Anillo rotatorio
+                    ctx.strokeStyle = biome.node; ctx.lineWidth = 2;
+                    ctx.strokeRect(-12, -12, 24, 24);
+                    
+                    // Órbitas
+                    ctx.rotate(-t.rot * 2);
+                    ctx.strokeRect(-16, -16, 32, 32);
+                    
+                    ctx.restore();
+                } else if(t.type === 'powerup' && t.active) {
+                    // DISEÑO DE POWER-UP MEJORADO
+                    const c = t.pType === 'speed' ? '#0ff' : (t.pType === 'shield' ? '#f0f' : '#ff0');
+                    ctx.save();
+                    ctx.translate(t.x, t.y);
+                    const bob = Math.sin(Date.now()/200) * 5;
+                    ctx.translate(0, bob);
+                    
+                    ctx.shadowBlur = 10; ctx.shadowColor = c;
+                    ctx.fillStyle = c;
+                    
+                    if(t.pType === 'speed') { // RAYO
+                        ctx.beginPath(); ctx.moveTo(-5, -12); ctx.lineTo(5, -2); ctx.lineTo(-2, -2); ctx.lineTo(5, 12);
+                        ctx.lineTo(-5, 2); ctx.lineTo(2, 2); ctx.closePath(); ctx.fill();
+                    } else if(t.pType === 'shield') { // ESCUDO
+                        ctx.beginPath();
+                        for(let i=0; i<6; i++) {
+                            let a = (i/6)*Math.PI*2;
+                            ctx.lineTo(Math.cos(a)*12, Math.sin(a)*12);
+                        }
+                        ctx.closePath(); ctx.fill();
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+                    } else { // BATERÍA
+                        ctx.fillRect(-8, -10, 16, 20); ctx.fillStyle = '#000'; ctx.fillRect(-4, -6, 8, 12);
+                        ctx.fillStyle = c; ctx.fillRect(-2, -4, 4, 8);
                     }
-                } else if(t.active) {
-                    const bounce = Math.sin(Date.now()/250 + t.phase) * 6;
-                    ctx.fillStyle = biome.node; ctx.beginPath(); ctx.arc(t.x, t.y + bounce, 9, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.ellipse(t.x, t.y+bounce, 18, 7, Math.PI/4+Date.now()/400, 0, Math.PI*2); ctx.stroke();
+                    ctx.restore();
                 }
             });
 
             game.enemies.forEach(e => {
-                ctx.fillStyle = '#333'; ctx.fillRect(e.x - 14, e.y - 14, 28, 20);
-                ctx.fillStyle = '#ff3333'; ctx.fillRect(e.x - 4, e.y - 6, 8, 8);
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                if(e.type === 'turret') {
+                    // Torretas con mejor diseño
+                    ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-20, 0, 40, 25);
+                    ctx.fillStyle = '#333'; ctx.fillRect(-15, -15, 30, 15);
+                    ctx.fillStyle = '#ff0000'; ctx.shadowBlur = 10; ctx.shadowColor = 'red';
+                    ctx.fillRect(-4, -18, 8, 10);
+                } else {
+                    // CAZADORES / DRONES MEJORADOS
+                    if(e.isChaser) {
+                        ctx.shadowBlur = 10; ctx.shadowColor = '#ff3333';
+                        ctx.fillStyle = '#ff3333';
+                        // Cuerpo
+                        ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(0, -15); ctx.lineTo(15, 0); ctx.lineTo(0, 15); ctx.closePath(); ctx.fill();
+                        // Ojo
+                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                        // Alas laterales
+                        ctx.fillStyle = '#aa0000'; ctx.fillRect(-18, -2, 6, 4); ctx.fillRect(12, -2, 6, 4);
+                    } else {
+                        // Patrulla normal
+                        ctx.fillStyle = '#444'; ctx.fillRect(-14, -10, 28, 20);
+                        ctx.fillStyle = '#0ff'; ctx.fillRect(e.vx > 0 ? 6 : -14, -4, 8, 8);
+                    }
+                }
+                ctx.restore();
+            });
+
+            game.projectiles.forEach(p => {
+                ctx.fillStyle = '#ff0'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0';
+                ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
             });
 
             if(game.portal.active) {
-                const s = 70 + Math.sin(Date.now()/100) * 15;
+                const s = 70 + Math.sin(Date.now()/100) * 10;
+                ctx.save();
+                ctx.translate(game.portal.x + 40, game.portal.y + 40);
+                ctx.rotate(Date.now()/500);
                 ctx.strokeStyle = '#ff00ea'; ctx.lineWidth = 4;
-                ctx.strokeRect(game.portal.x + (80-s)/2, game.portal.y + (80-s)/2, s, s);
+                ctx.shadowBlur = 20; ctx.shadowColor = '#ff00ea';
+                ctx.strokeRect(-s/2, -s/2, s, s);
+                ctx.rotate(-Date.now()/250);
+                ctx.strokeRect(-s/3, -s/3, s/1.5, s/1.5);
+                ctx.restore();
             }
 
             game.particles.forEach(p => { ctx.globalAlpha = p.l; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, 3, 3); });
@@ -532,24 +684,17 @@
             player.draw();
         }
 
-        // --- SISTEMA DE NAVEGACIÓN ---
         function showScreen(screen) {
             document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
             document.getElementById('game-ui').classList.add('hidden');
             document.getElementById('mobile-ui').classList.add('hidden');
-
-            if (screen === 'main') {
-                document.getElementById('main-menu').classList.remove('hidden');
-            } else if (screen === 'selection') {
-                renderMapGrid();
-                document.getElementById('selection-menu').classList.remove('hidden');
-            } else if (screen === 'ranking') {
-                renderRanking();
-                document.getElementById('ranking-menu').classList.remove('hidden');
-            } else if (screen === 'game') {
-                document.getElementById('game-ui').classList.remove('hidden');
-                document.getElementById('mobile-ui').classList.remove('hidden');
-                game.paused = false;
+            if (screen === 'main') document.getElementById('main-menu').classList.remove('hidden');
+            else if (screen === 'selection') { renderMapGrid(); document.getElementById('selection-menu').classList.remove('hidden'); }
+            else if (screen === 'ranking') { renderRanking(); document.getElementById('ranking-menu').classList.remove('hidden'); }
+            else if (screen === 'game') { 
+                document.getElementById('game-ui').classList.remove('hidden'); 
+                if(window.innerWidth < 768) document.getElementById('mobile-ui').classList.remove('hidden');
+                game.paused = false; 
             }
         }
 
@@ -561,19 +706,8 @@
                 const stats = gameData.stats[i];
                 const card = document.createElement('div');
                 card.className = `map-card ${isLocked ? 'locked' : ''} ${stats ? 'best' : ''}`;
-                card.innerHTML = `
-                    <div class="text-[9px] font-bold">SECTOR ${i}</div>
-                    <div class="text-[7px] mt-2 text-gray-400">
-                        ${stats ? `🏆 ${formatTime(stats.time)}<br>☠ ${stats.deaths}` : (isLocked ? 'BLOQUEADO' : 'LISTO')}
-                    </div>
-                `;
-                if (!isLocked) {
-                    card.onclick = () => {
-                        audio.init();
-                        generateLevel(i - 1);
-                        showScreen('game');
-                    };
-                }
+                card.innerHTML = `<div class="text-[9px] font-bold">SECTOR ${i}</div><div class="text-[7px] mt-2 text-gray-400">${stats ? '🏆 '+formatTime(stats.time) : (isLocked ? 'LOCK' : 'GO')}</div>`;
+                if (!isLocked) card.onclick = () => { generateLevel(i - 1); showScreen('game'); };
                 grid.appendChild(card);
             }
         }
@@ -584,24 +718,13 @@
             for (let i = 1; i <= MAX_LEVELS; i++) {
                 const stats = gameData.stats[i];
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>MAPA ${i}</td>
-                    <td class="text-cyan-400">${stats ? formatTime(stats.time) : '--:--:--'}</td>
-                    <td class="text-red-500">${stats ? stats.deaths : '0'}</td>
-                    <td class="${stats ? 'text-green-400' : 'text-gray-600'}">${stats ? 'SUPERADO' : 'PENDIENTE'}</td>
-                `;
+                row.innerHTML = `<td>MAPA ${i}</td><td>${stats ? formatTime(stats.time) : '--:--'}</td><td>${stats ? stats.deaths : '0'}</td><td class="${stats ? 'text-green-400' : 'text-gray-600'}">${stats ? 'OK' : '...'}</td>`;
                 body.appendChild(row);
             }
         }
 
-        function loop() {
-            update(); draw();
-            requestAnimationFrame(loop);
-        }
-
         window.onkeydown = e => game.keys[e.code] = true;
         window.onkeyup = e => game.keys[e.code] = false;
-
         const setupBtn = (id, k) => {
             const el = document.getElementById(id);
             el.onmousedown = el.ontouchstart = (e) => { e.preventDefault(); game.keys[k] = true; };
@@ -609,10 +732,9 @@
         };
         setupBtn('mLeft', 'KeyA'); setupBtn('mRight', 'KeyD'); setupBtn('mJump', 'mJump');
 
-        // Iniciar en menu principal
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
         loop();
         showScreen('main');
-
     </script>
 </body>
 </html>
