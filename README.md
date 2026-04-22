@@ -1,4 +1,4 @@
-# 🎮 Disseny del Joc: Sistema de Joc i Mecàniques
+# Disseny del Joc: Sistema de Joc i Mecàniques
 
 ---
 
