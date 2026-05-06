@@ -1,6 +1,7 @@
-# COSMIC KEEPER
-**Disseny de Sistema i Abast del Projecte**
-*Autor: Izan de Maya*
+# COSMIC KEEPER  
+## Disseny de Sistema i Abast del Projecte
+
+**Autor:** Izan de Maya
 
 ---
 
