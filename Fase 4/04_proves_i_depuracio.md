@@ -8,17 +8,19 @@ Aquest document detalla el procés de control de qualitat, les proves realitzade
 
 # 1. Casos de Prova
 
+# 1. Casos de Prova
+
 S'han executat els següents casos per verificar l'estabilitat del motor de joc i les mecàniques principals sota condicions reals d'ús.
 
 ---
 
-| ID | Objectiu | Entrada | Resultat Esperat | Resultat Obtingut |
-|---|---|---|---|---|
-| **CP-01** | Col·lisió amb paret | El jugador camina cap a un bloc de tipus `wall`. | El jugador s'atura i la velocitat `vx` passa a `0` sense travessar el mur. | Èxit. Resolució per eixos `(X, Y)` correcta. |
-| **CP-02** | Recollida de nodes | Col·lisió entre el jugador i un node actiu. | Increment del comptador de nodes i eliminació visual del node. | Èxit. El marcador de la interfície s'actualitza a l'instant. |
-| **CP-03** | Activació del Portal | Recollir tots els nodes requerits del nivell. | L'objecte `game.portal.active` passa a `true` i el portal es renderitza. | Èxit. El portal apareix en arribar a l'objectiu de nodes. |
-| **CP-04** | Sistema d'Energia | Mantenir premuda la tecla de salt/vol (propulsió). | La barra d'energia disminueix i el vol s'atura en arribar a `0`. | Èxit. L'energia es consumeix i es recarrega a terra. |
-| **CP-05** | Persistència de dades | Completar un nivell i tornar al menú principal. | El millor temps i les morts es guarden correctament al `localStorage`. | Èxit. Les dades es recuperen en reiniciar el navegador. |
+| ID | Cas de prova | Entrada / Acció realitzada | Resultat esperat | Resultat obtingut |
+|:---:|---|---|---|---|
+| **CP-01** | **Col·lisió amb paret** | El jugador camina cap a un bloc de tipus `wall`. | El jugador s'atura i la velocitat `vx` passa a `0` sense travessar el mur. | Resolució correcta per eixos `(X, Y)`. El jugador no pot creuar la paret. |
+| **CP-02** | **Recollida de nodes** | Col·lisió entre el jugador i un node actiu. | Increment del comptador de nodes i desaparició visual del node. | El node desapareix correctament i el marcador s'actualitza a l'instant. |
+| **CP-03** | **Activació del portal** | Recollir tots els nodes requerits del nivell. | `game.portal.active` passa a `true` i el portal es mostra en pantalla. | El portal apareix correctament en completar l'objectiu de nodes. |
+| **CP-04** | **Sistema d'energia** | Mantenir premuda la tecla de salt/vol (propulsió). | L'energia disminueix progressivament i el vol s'atura en arribar a `0`. | Consum i recàrrega d'energia funcionant correctament. |
+| **CP-05** | **Persistència de dades** | Completar un nivell i tornar al menú principal. | Temps i morts guardats correctament al `localStorage`. | Les dades es mantenen després de reiniciar el navegador. |
 
 ---
 
